@@ -1,10 +1,10 @@
 import Image from "next/image"
-import ObsController from "@/components/OBS"
+import ObsControllerNew from "@/components/OBSnew"
 
 export default function Home() {
   return (
     <div className="">
-      <ObsController />
+      <ObsControllerNew />
     </div>
   )
 }
