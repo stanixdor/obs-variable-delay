@@ -1,10 +1,10 @@
-import Image from "next/image"
-import ObsControllerNew from "@/components/OBSnew"
+import ObsControllerDelay from "@/components/OBS1scene";
+import { Suspense } from "react";
 
 export default function Home() {
   return (
-    <div className="">
-      <ObsControllerNew />
-    </div>
-  )
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <ObsControllerDelay />
+    </Suspense>
+  );
 }
