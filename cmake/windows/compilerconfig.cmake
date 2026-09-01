@@ -55,6 +55,7 @@ add_link_options(
   $<$<NOT:$<CONFIG:Debug>>:/LTCG>
   $<$<NOT:$<CONFIG:Debug>>:/INCREMENTAL:NO>
   /DEBUG
+  /PDBALTPATH:%_PDB%
   /Brepro
 )
 
