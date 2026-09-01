@@ -37,7 +37,7 @@ inputs:
     required: false
     default: ''
   package:
-    description: Create Windows or macOS installation package
+    description: Create platform installation package
     required: false
     default: 'false'
   workingDirectory:
@@ -90,7 +90,7 @@ runs:
           --target ubuntu-${{ inputs.target }}
           --config ${{ inputs.config }}
         )
-        if (( ${+RUNNER_DEBUG} )) build_args+=(--debug)
+        if (( ${+RUNNER_DEBUG} )) package_args+=(--debug)
 
         if [[ '${{ inputs.package }}' == 'true' ]] package_args+=(--package)
 

@@ -18,7 +18,13 @@ include(helpers)
 
 add_library(${CMAKE_PROJECT_NAME} MODULE)
 
-find_package(libobs REQUIRED)
+if(LINUX)
+  # OBS rejects modules built against a newer major/minor module ABI. Keep Linux
+  # CI on the 32.2 ABI even when the OBS PPA advances to a newer release line.
+  find_package(libobs 32.2...<32.3 REQUIRED)
+else()
+  find_package(libobs REQUIRED)
+endif()
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs)
 
 if(ENABLE_FRONTEND_API)

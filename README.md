@@ -3,7 +3,7 @@
 Plugin nativo para OBS Studio que permite **añadir, cancelar, cambiar o quitar delay sin detener la emisión ni la grabación**. Trabaja sobre los paquetes ya comprimidos que OBS entrega al output, por lo que el coste estable es principalmente RAM y no una segunda codificación permanente.
 
 Versión: `1.1.0`<br>
-Compatibilidad de referencia: OBS Studio `32.2.2`, Qt `6.11.1`, macOS 13+ y Windows 10/11 x64.
+Compatibilidad de referencia: OBS Studio `32.2.x`, Qt 6, macOS 13+, Windows 10/11 x64 y Ubuntu 24.04 x86_64.
 
 ## Qué hace
 
@@ -90,6 +90,26 @@ El artefacto local está firmado *ad hoc*. No está notarizado con una cuenta Ap
 4. Abre OBS y activa **Docks → Dynamic Delay**.
 
 El DLL incluido no lleva firma Authenticode. La firma para distribución pública requiere un certificado de firma de código del editor.
+
+### Ubuntu 24.04 x86_64
+
+La opción recomendada para una instalación nativa es el paquete Debian. Requiere OBS Studio 32.2 o posterior;
+si esa versión no está en los repositorios configurados, puede obtenerse desde el PPA oficial de OBS:
+
+```bash
+sudo add-apt-repository ppa:obsproject/obs-studio
+sudo apt update
+sudo apt install ./obs-dynamic-delay-1.1.0-x86_64-linux-gnu.deb
+```
+
+Como archivo alternativo, el `tar.xz` contiene el layout estándar `lib/share` para `/usr`:
+
+```bash
+sudo tar -xJf obs-dynamic-delay-1.1.0-x86_64-ubuntu-gnu.tar.xz -C /usr
+```
+
+Reinicia OBS y activa **Docks → Dynamic Delay**. Estos dos artefactos están construidos para OBS nativo en
+Ubuntu 24.04 x86_64; no se presentan como paquetes para Flatpak, Snap ni otras distribuciones.
 
 ## Uso y rendimiento
 
@@ -183,7 +203,21 @@ ctest --test-dir build_x64 --build-config RelWithDebInfo --output-on-failure
 cmake --install build_x64 --prefix release/RelWithDebInfo --config RelWithDebInfo
 ```
 
-Los workflows incluidos construyen y prueban macOS universal y Windows x64 en GitHub Actions. Generan un ZIP para Windows y un PKG o `tar.xz` para macOS. El tag de release debe coincidir con la versión de `buildspec.json`; se permiten sufijos de prerelease como `-beta2` o `-rc1`.
+### Ubuntu 24.04 x86_64
+
+Requiere CMake 3.28+, Ninja, GCC, Qt 6 y la instalación nativa de OBS Studio 32.2.x con sus archivos de desarrollo:
+
+```bash
+cmake --preset ubuntu-x86_64
+cmake --build --preset ubuntu-x86_64 --parallel
+ctest --test-dir build_x86_64 --output-on-failure
+cmake --install build_x86_64 --prefix release/RelWithDebInfo
+```
+
+Los workflows incluidos construyen y prueban macOS universal, Windows x64 y Ubuntu 24.04 x86_64 en GitHub
+Actions. Generan un ZIP para Windows, un PKG o `tar.xz` para macOS y un `tar.xz` más un paquete Debian para
+Linux. El tag de release debe coincidir con la versión de `buildspec.json`; se permiten sufijos de prerelease
+como `-beta2` o `-rc1`.
 
 ## Validación realizada
 
@@ -192,6 +226,10 @@ Los workflows incluidos construyen y prueban macOS universal y Windows x64 en Gi
 - 9 escenarios del puente de audio: FIFO acotada/concurrente, offsets positivos/negativos, discontinuidades,
   fase 48 kHz, underrun y ausencia de drift.
 - Build estricto con warnings como errores.
+- Build nativo Linux x86_64 en Ubuntu 24.04 contra OBS Studio 32.2.0 y Qt 6.4.2; las dos suites pasan y
+  `ldd -r` no encuentra símbolos sin resolver.
+- Prueba de carga real del paquete Debian en OBS 32.2.0 bajo Xvfb/llvmpipe: el módulo carga y descarga
+  limpiamente, sin crash y con 0 fugas reportadas por OBS.
 - ASan + UBSan y TSan sobre ambos núcleos, sin hallazgos.
 - Prueba real en OBS 32.2.2 macOS arm64: iniciar una grabación, cancelar durante `Preparing/Filling`, activar un
   delay completo, cambiar Program de escena, abrir/cerrar el preview y volver a live sin detener el output.

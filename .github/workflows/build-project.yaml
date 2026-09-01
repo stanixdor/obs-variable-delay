@@ -199,6 +199,82 @@ jobs:
           path: ${{ github.workspace }}/.ccache
           key: ${{ runner.os }}-ccache-${{ needs.check-event.outputs.config }}
 
+  ubuntu-build:
+    name: Build for Ubuntu 🐧
+    runs-on: ubuntu-24.04
+    needs: check-event
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set Up Environment 🔧
+        id: setup
+        run: |
+          : Set Up Environment 🔧
+          if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
+
+          read -r product_name product_version <<< \
+            "$(jq -r '. | {name, version} | join(" ")' buildspec.json)"
+
+          echo "pluginName=${product_name}" >> $GITHUB_OUTPUT
+          echo "pluginVersion=${product_version}" >> $GITHUB_OUTPUT
+
+      - uses: actions/cache/restore@v4
+        id: ccache-cache
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ${{ runner.os }}-ubuntu-24.04-ccache-x86_64-${{ needs.check-event.outputs.config }}
+          restore-keys: |
+            ${{ runner.os }}-ubuntu-24.04-ccache-x86_64-
+
+      - name: Build Plugin 🧱
+        uses: ./.github/actions/build-plugin
+        with:
+          target: x86_64
+          config: ${{ needs.check-event.outputs.config }}
+
+      - name: Run Unit Tests 🧪
+        run: |
+          : Run Unit Tests 🧪
+          cmake --build build_x86_64 \
+            --target packet_delay_tests audio_spsc_fifo_tests \
+            --config ${{ needs.check-event.outputs.config }} \
+            --parallel
+          ctest \
+            --test-dir build_x86_64 \
+            --build-config ${{ needs.check-event.outputs.config }} \
+            --output-on-failure
+
+      - name: Package Plugin 📀
+        uses: ./.github/actions/package-plugin
+        with:
+          target: x86_64
+          config: ${{ needs.check-event.outputs.config }}
+          package: ${{ fromJSON(needs.check-event.outputs.package) }}
+
+      - name: Upload Source Tarball 🗜️
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-sources-${{ needs.check-event.outputs.commitHash }}
+          path: ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-source.*
+
+      - name: Upload Artifacts 📡
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-ubuntu-24.04-x86_64-${{ needs.check-event.outputs.commitHash }}
+          path: ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-x86_64*.*
+
+      - uses: actions/cache/save@v4
+        if: github.event_name != 'pull_request' && steps.ccache-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ${{ runner.os }}-ubuntu-24.04-ccache-x86_64-${{ needs.check-event.outputs.config }}
+
   windows-build:
     name: Build for Windows 🪟
     runs-on: windows-2022
