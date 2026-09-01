@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <sstream>
@@ -317,14 +318,16 @@ void timestamps_shift_once_and_preserve_pts_minus_dts()
 	CHECK_EQ(output[0].packet.metadata.duration, 3'000);
 	CHECK_EQ(output[0].packet.metadata.flags, 17U);
 
-	PacketDelay rational;
-	begin_activation(rational, 1s);
-	CHECK(rational.push(packet({StreamKind::Video, 0, 0}, 100, 90, 1,
+	// OBS packet timestamps use 1 / timebase_den ticks. timebase_num is
+	// frame-step/format metadata and must not scale pts or dts.
+	PacketDelay obs_time_base;
+	begin_activation(obs_time_base, 1s);
+	CHECK(obs_time_base.push(packet({StreamKind::Video, 0, 0}, 100, 90, 1,
 		{1'001, 30'000}), 0ms).empty());
-	CHECK(rational.push(packet({StreamKind::Video, 0, 0}, 130, 120, 1,
+	CHECK(obs_time_base.push(packet({StreamKind::Video, 0, 0}, 130, 120, 1,
 		{1'001, 30'000}), 1s).empty());
-	commit_activation(rational, 1s);
-	auto rounded = rational.poll(1s);
+	commit_activation(obs_time_base, 1s);
+	auto rounded = obs_time_base.poll(1s);
 	CHECK_EQ(rounded[0].packet.metadata.pts, 30'100);
 	CHECK_EQ(rounded[0].packet.metadata.dts, 30'090);
 	CHECK_EQ(rounded[0].packet.metadata.pts - rounded[0].packet.metadata.dts, 10);
@@ -619,20 +622,21 @@ void multi_video_return_protects_each_keyframe_until_commit()
 	observe_monotonic(delay.push(packet(video_a, 60, 60, 1,
 		{1, 1'000}, true), 60ms));
 	observe_monotonic(delay.push(packet(audio, 60, 60), 60ms));
+	// A second A keyframe is already buffered before A60 becomes due. Once A60
+	// is consumed to keep the delayed branch moving, A80 must remain selected;
+	// waiting for a third A keyframe would freeze an otherwise-ready return.
+	observe_monotonic(delay.push(packet(video_a, 80, 80, 1,
+		{1, 1'000}, true), 80ms));
+	observe_monotonic(delay.push(packet(audio, 80, 80), 80ms));
 	CHECK(!delay.ready_for_return());
-	// A's early keyframe is consumed so the delayed branch keeps moving while B
-	// is missing; the return transaction then waits for A's next keyframe.
+	// A60 is consumed while B is missing, but A80 remains protected.
 	observe_monotonic(delay.poll(120ms));
 	observe_monotonic(delay.push(packet(video_b, 120, 120, 1,
 		{1, 1'000}, true), 120ms));
 	observe_monotonic(delay.push(packet(audio, 120, 120), 120ms));
-	CHECK(!delay.ready_for_return());
-	observe_monotonic(delay.push(packet(video_a, 130, 130, 1,
-		{1, 1'000}, true), 130ms));
-	observe_monotonic(delay.push(packet(audio, 130, 130), 130ms));
 	CHECK(delay.ready_for_return());
-	CHECK_EQ(delay.commit_return(130ms), RequestResult::Accepted);
-	auto live = delay.poll(130ms);
+	CHECK_EQ(delay.commit_return(120ms), RequestResult::Accepted);
+	auto live = delay.poll(120ms);
 	observe_monotonic(live);
 	std::unordered_map<StreamKey, bool, StreamKeyHash> first_video_is_keyframe;
 	for (const auto &item : live) {
@@ -644,6 +648,12 @@ void multi_video_return_protects_each_keyframe_until_commit()
 	CHECK_EQ(first_video_is_keyframe.size(), 2U);
 	CHECK(first_video_is_keyframe.at(video_a));
 	CHECK(first_video_is_keyframe.at(video_b));
+	const auto video_a_cut = std::find_if(live.begin(), live.end(),
+		[&](const auto &item) {
+			return item.packet.metadata.stream == video_a;
+		});
+	CHECK(video_a_cut != live.end());
+	CHECK_EQ(video_a_cut->received_at, 80ms);
 
 	auto live_continuation = delay.push(packet(video_a, 140, 140, 1,
 		{1, 1'000}, false), 140ms);
@@ -836,8 +846,51 @@ void invalid_timebase_and_timestamp_overflow_fail_open()
 		{1, 1}, true, 0}));
 	CHECK(!exact_order.observe_external_output({{StreamKind::Audio, 1, 1},
 		9'007'199'254'740'992LL, 9'007'199'254'740'992LL, 1,
-		{2, 2}, true, 0}));
+		{2, 1}, true, 0}));
 	CHECK_EQ(exact_order.state(), DelayState::Error);
+
+	// A long-double estimate can collapse these values on platforms where it
+	// has only binary64 precision. The exact bridge must still find +100 ticks.
+	constexpr auto large_timestamp = std::int64_t{1} << 60;
+	PacketDelay exact_bridge;
+	CHECK(exact_bridge.observe_external_output({{StreamKind::Audio, 0, 1},
+		large_timestamp + 100, large_timestamp + 100, 1,
+		{1, 1}, true, 0}));
+	auto bridged = exact_bridge.push(packet({StreamKind::Video, 0, 1},
+		large_timestamp, large_timestamp, 1, {1, 1}), 0ms);
+	CHECK_EQ(exact_bridge.state(), DelayState::Bypass);
+	CHECK_EQ(bridged.size(), 1U);
+	CHECK_EQ(bridged[0].packet.metadata.dts, large_timestamp + 100);
+	CHECK_EQ(bridged[0].packet.metadata.pts, large_timestamp + 100);
+
+	// The common A/V epoch conversion must also be exact. These OBS-sized
+	// denominators reproduce a 32-tick under-estimate with binary64 arithmetic.
+	const StreamKey old_audio{StreamKind::Audio, 0, 1};
+	const StreamKey new_audio{StreamKind::Audio, 0, 2};
+	const StreamKey second_audio{StreamKind::Audio, 1, 1};
+	PacketDelay exact_common_epoch;
+	CHECK(exact_common_epoch.observe_external_output({old_audio,
+		637'552'436'098'056'101LL, 637'552'436'098'056'101LL, 1,
+		{1, 847'619'862}, true, 0}));
+	begin_activation(exact_common_epoch, 0ms);
+	CHECK(exact_common_epoch.push(packet(new_audio, 0, 0, 1,
+		{1, 847'619'862}), 0ms).empty());
+	CHECK(exact_common_epoch.push(packet(second_audio, 0, 0, 1,
+		{1, 2'123'433'047}), 0ms).empty());
+	CHECK(exact_common_epoch.ready_for_delayed(0ms));
+	CHECK_EQ(exact_common_epoch.commit_delayed(0ms), RequestResult::Accepted);
+	auto common_epoch = exact_common_epoch.poll(0ms);
+	auto advanced = exact_common_epoch.push(packet(new_audio, 1, 1, 1,
+		{1, 847'619'862}), 1ms);
+	common_epoch.insert(common_epoch.end(), std::make_move_iterator(advanced.begin()),
+		std::make_move_iterator(advanced.end()));
+	const auto second = std::find_if(common_epoch.begin(), common_epoch.end(),
+		[&](const auto &item) {
+			return item.packet.metadata.stream == second_audio;
+		});
+	CHECK(second != common_epoch.end());
+	CHECK_EQ(second->packet.metadata.dts, 1'597'178'136'920'496'160LL);
+	CHECK_EQ(second->packet.metadata.pts, 1'597'178'136'920'496'160LL);
 
 	PacketDelay invalid;
 	begin_activation(invalid, 10ms);

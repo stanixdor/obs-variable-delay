@@ -159,6 +159,38 @@ struct UInt192 {
 	return true;
 }
 
+template<typename Predicate>
+[[nodiscard]] std::optional<std::int64_t> first_satisfying_nonnegative(
+	std::int64_t maximum, Predicate &&predicate)
+{
+	if (maximum < 0)
+		return std::nullopt;
+	if (predicate(std::int64_t{0}))
+		return std::int64_t{0};
+	if (maximum == 0)
+		return std::nullopt;
+
+	std::int64_t lower = 0;
+	std::int64_t upper = 1;
+	for (;;) {
+		upper = std::min(upper, maximum);
+		if (predicate(upper))
+			break;
+		lower = upper;
+		if (upper == maximum)
+			return std::nullopt;
+		upper = upper > maximum / 2 ? maximum : upper * 2;
+	}
+	while (upper - lower > 1) {
+		const auto middle = lower + (upper - lower) / 2;
+		if (predicate(middle))
+			upper = middle;
+		else
+			lower = middle;
+	}
+	return upper;
+}
+
 [[nodiscard]] std::optional<std::int64_t> delay_ticks(Duration delay,
 	const TimeBase &time_base) noexcept
 {
@@ -972,33 +1004,34 @@ bool PacketDelay::create_timestamp_offset_locked(const Packet &packet,
 	const auto raise_to_horizon = [&](std::int64_t timestamp,
 		const TimestampHorizon &horizon, bool strict) {
 		const auto &time_base = packet.metadata.time_base;
-		for (int attempt = 0; attempt < 8; ++attempt) {
-			std::int64_t shifted = 0;
-			if (!add_timestamp(timestamp, offset, shifted))
+		std::int64_t shifted = 0;
+		if (!add_timestamp(timestamp, offset, shifted))
+			return false;
+		const auto satisfies = [&](std::int64_t additional) {
+			std::int64_t candidate_offset = 0;
+			std::int64_t candidate = 0;
+			if (!add_timestamp(offset, additional, candidate_offset) ||
+				!add_timestamp(timestamp, candidate_offset, candidate))
 				return false;
-			const int comparison = compare_timestamps(shifted, time_base,
+			const int comparison = compare_timestamps(candidate, time_base,
 				horizon.value, horizon.time_base);
-			if (comparison > 0 || (!strict && comparison == 0))
-				return true;
-			const auto shifted_seconds = normalized_timestamp(shifted, time_base);
-			if (!shifted_seconds)
-				return false;
-			const auto target = strict ? std::nextafter(horizon.normalized,
-				std::numeric_limits<long double>::infinity())
-				: horizon.normalized;
-			long double missing_ticks = std::ceil(
-				(target - *shifted_seconds) *
-				static_cast<long double>(time_base.denominator));
-			missing_ticks = std::max(missing_ticks, 1.0L);
-			const long double upper_exclusive = std::ldexp(1.0L, 63);
-			if (!std::isfinite(missing_ticks) || missing_ticks < 0.0L ||
-				missing_ticks >= upper_exclusive)
-				return false;
-			if (!add_timestamp(offset,
-				static_cast<std::int64_t>(missing_ticks), offset))
-				return false;
-		}
-		return false;
+			return comparison > 0 || (!strict && comparison == 0);
+		};
+
+		// Find the smallest representable tick increment with exact timestamp
+		// comparisons. An exponential bracket plus binary search avoids relying on
+		// long-double precision for large PTS/DTS values (notably on ARM64/MSVC).
+		const auto maximum = std::numeric_limits<std::int64_t>::max();
+		if (offset < 0)
+			return false;
+		std::int64_t maximum_additional = maximum - offset;
+		if (shifted >= 0)
+			maximum_additional = std::min(maximum_additional, maximum - shifted);
+		const auto additional = first_satisfying_nonnegative(maximum_additional,
+			satisfies);
+		if (!additional)
+			return false;
+		return add_timestamp(offset, *additional, offset);
 	};
 
 	const auto last_stream_dts = last_output_dts_.find(timeline_key(stream));
@@ -1047,32 +1080,17 @@ bool PacketDelay::unify_timestamp_offsets_locked(
 
 	for (const auto *packet : epoch_fronts) {
 		const auto &time_base = packet->metadata.time_base;
-		long double raw = common_shift->normalized *
-			static_cast<long double>(time_base.denominator);
-		long double rounded = std::ceil(raw);
-		const long double upper_exclusive = std::ldexp(1.0L, 63);
-		if (!std::isfinite(rounded) || rounded < 0.0L ||
-			rounded >= upper_exclusive)
+		const auto ticks = first_satisfying_nonnegative(
+			std::numeric_limits<std::int64_t>::max(), [&](std::int64_t candidate) {
+				return compare_timestamps(candidate, time_base,
+					common_shift->value, common_shift->time_base) >= 0;
+			});
+		if (!ticks)
 			return false;
-		auto ticks = static_cast<std::int64_t>(rounded);
-		if (compare_timestamps(ticks, time_base, common_shift->value,
-			common_shift->time_base) < 0) {
-			raw = std::nextafter(common_shift->normalized,
-				std::numeric_limits<long double>::infinity()) *
-				static_cast<long double>(time_base.denominator);
-			rounded = std::ceil(raw);
-			if (!std::isfinite(rounded) || rounded < 0.0L ||
-				rounded >= upper_exclusive)
-				return false;
-			ticks = static_cast<std::int64_t>(rounded);
-			if (compare_timestamps(ticks, time_base, common_shift->value,
-				common_shift->time_base) < 0)
-				return false;
-		}
 		auto offset = timestamp_offsets_.find(packet->metadata.stream);
 		if (offset == timestamp_offsets_.end())
 			return false;
-		offset->second = std::max(offset->second, ticks);
+		offset->second = std::max(offset->second, *ticks);
 		std::int64_t shifted_pts = 0;
 		std::int64_t shifted_dts = 0;
 		if (!add_timestamp(packet->metadata.pts, offset->second, shifted_pts) ||
@@ -1485,7 +1503,11 @@ void PacketDelay::observe_return_keyframe_locked(const QueuedPacket &packet)
 		!return_requested_at_ || packet.received_at < *return_requested_at_)
 		return;
 	if (packet.packet.metadata.keyframe)
-		return_keyframes_.try_emplace(stream, packet.sequence);
+		// Track the newest buffered keyframe. If an earlier keyframe becomes due
+		// while another video lane is still missing its cut, drain_ready_locked()
+		// may consume it; retaining the newest cursor keeps an already-buffered
+		// replacement visible and GOP-protected.
+		return_keyframes_.insert_or_assign(stream, packet.sequence);
 }
 
 bool PacketDelay::return_ready_locked(TimePoint now) const noexcept
