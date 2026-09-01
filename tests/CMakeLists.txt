@@ -25,7 +25,10 @@ add_executable(audio_spsc_fifo_tests audio_spsc_fifo_tests.cpp)
 target_include_directories(audio_spsc_fifo_tests PRIVATE ../src)
 target_compile_features(audio_spsc_fifo_tests PRIVATE cxx_std_20)
 if(MSVC)
-  target_compile_options(audio_spsc_fifo_tests PRIVATE /W4 /permissive-)
+  # Capacity 3 intentionally pads between the odd-sized slot array and the
+  # first 64-byte sequence wrapper so producer/consumer cache lines stay
+  # isolated. C4324 reports that deliberate layout padding at warning level 4.
+  target_compile_options(audio_spsc_fifo_tests PRIVATE /W4 /permissive- /wd4324)
 else()
   target_compile_options(
     audio_spsc_fifo_tests
