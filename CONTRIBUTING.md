@@ -9,9 +9,9 @@ plugin changes, and website improvements are welcome in English or Spanish.
 
 ### Before opening an issue
 
-1. Search [existing issues](https://github.com/stanixdor/obs-variable-delay-web/issues).
+1. Search [existing issues](https://github.com/stanixdor/obs-variable-delay/issues).
 2. Reproduce the problem with the
-   [latest release](https://github.com/stanixdor/obs-variable-delay-web/releases/latest).
+   [latest release](https://github.com/stanixdor/obs-variable-delay/releases/latest).
 3. Read the [English guide](docs/guide.en.md), especially the supported-output and audio-safety limitations.
 4. If the dock shows **ERROR / LIVE FALLBACK**, copy the exact detail shown below the state.
 5. Create an OBS log after reproducing the issue and remove stream keys, credentials, personal paths, and other
@@ -129,9 +129,9 @@ técnica, traducciones, tests, cambios del plugin nativo y mejoras de la web.
 
 ### Antes de abrir una issue
 
-1. Busca en las [issues existentes](https://github.com/stanixdor/obs-variable-delay-web/issues).
+1. Busca en las [issues existentes](https://github.com/stanixdor/obs-variable-delay/issues).
 2. Reproduce el problema con la
-   [última versión](https://github.com/stanixdor/obs-variable-delay-web/releases/latest).
+   [última versión](https://github.com/stanixdor/obs-variable-delay/releases/latest).
 3. Lee la [guía en español](docs/guide.es.md), en especial las limitaciones de outputs compatibles y seguridad de
    audio.
 4. Si el panel muestra **ERROR / LIVE FALLBACK**, copia el detalle exacto que aparece debajo del estado.

@@ -17,7 +17,7 @@ and artifacts, not third-party repackaging or modified builds.
 ### Reporting a vulnerability
 
 Do not open a public issue for a suspected vulnerability. Use GitHub's private
-[Report a vulnerability](https://github.com/stanixdor/obs-variable-delay-web/security/advisories/new) form and
+[Report a vulnerability](https://github.com/stanixdor/obs-variable-delay/security/advisories/new) form and
 include:
 
 - the affected version, operating system, architecture, and OBS Studio version;
@@ -61,7 +61,7 @@ themselves.
 ### Artifact integrity and platform signing
 
 Download only from the repository's
-[GitHub Releases](https://github.com/stanixdor/obs-variable-delay-web/releases). Each release publishes SHA-256
+[GitHub Releases](https://github.com/stanixdor/obs-variable-delay/releases). Each release publishes SHA-256
 checksums; verify the downloaded filename and hash before installation.
 
 The 1.1.1 macOS plugin bundle is ad-hoc signed. The PKG has no Developer ID signature and is not Apple-notarized.
@@ -91,7 +91,7 @@ fuente y los artefactos oficiales de este repositorio, no a repaquetados de terc
 ### Informar de una vulnerabilidad
 
 No abras una issue pública para una posible vulnerabilidad. Usa el formulario privado de GitHub
-[Report a vulnerability](https://github.com/stanixdor/obs-variable-delay-web/security/advisories/new) e incluye:
+[Report a vulnerability](https://github.com/stanixdor/obs-variable-delay/security/advisories/new) e incluye:
 
 - versión afectada, sistema operativo, arquitectura y versión de OBS Studio;
 - componente vulnerable: plugin nativo, paquete/instalador, workflow de release o web;
@@ -135,7 +135,7 @@ vulnerabilidades por sí mismos.
 ### Integridad de artefactos y firma por plataforma
 
 Descarga únicamente desde las
-[GitHub Releases](https://github.com/stanixdor/obs-variable-delay-web/releases) del repositorio. Cada release
+[GitHub Releases](https://github.com/stanixdor/obs-variable-delay/releases) del repositorio. Cada release
 publica checksums SHA-256; comprueba el nombre y el hash del archivo descargado antes de instalar.
 
 El bundle del plugin para macOS 1.1.1 tiene firma ad hoc. El PKG no tiene firma Developer ID ni está notarizado por

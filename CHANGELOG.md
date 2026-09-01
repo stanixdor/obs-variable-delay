@@ -16,7 +16,7 @@ No user-facing changes have been published after 1.1.1.
 
 ### [1.1.1] — 2026-09-01
 
-[Release page and downloads](https://github.com/stanixdor/obs-variable-delay-web/releases/tag/1.1.1) ·
+[Release page and downloads](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.1) ·
 [Full release notes](docs/releases/1.1.1.md)
 
 #### Added
@@ -80,7 +80,7 @@ No se han publicado cambios visibles para el usuario después de la versión 1.1
 
 ### [1.1.1] — 2026-09-01
 
-[Página de la versión y descargas](https://github.com/stanixdor/obs-variable-delay-web/releases/tag/1.1.1) ·
+[Página de la versión y descargas](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.1) ·
 [Notas completas de la versión](docs/releases/1.1.1.md)
 
 #### Añadido
@@ -135,4 +135,4 @@ No se han publicado cambios visibles para el usuario después de la versión 1.1
 - El bundle del plugin para macOS tiene firma ad hoc; el PKG no tiene firma Developer ID ni está notarizado. El DLL
   de Windows no tiene firma Authenticode.
 
-[1.1.1]: https://github.com/stanixdor/obs-variable-delay-web/releases/tag/1.1.1
+[1.1.1]: https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.1

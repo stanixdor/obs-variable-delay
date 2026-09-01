@@ -6,12 +6,12 @@
 
 **Delay variable para OBS Studio — añade, cambia, cancela o elimina el delay sin detener el directo ni la grabación.**
 
-[![Latest release](https://img.shields.io/github/v/release/stanixdor/obs-variable-delay-web?display_name=tag&sort=semver&label=release)](https://github.com/stanixdor/obs-variable-delay-web/releases/latest)
-[![Build](https://github.com/stanixdor/obs-variable-delay-web/actions/workflows/push.yaml/badge.svg?branch=main)](https://github.com/stanixdor/obs-variable-delay-web/actions/workflows/push.yaml)
+[![Latest release](https://img.shields.io/github/v/release/stanixdor/obs-variable-delay?display_name=tag&sort=semver&label=release)](https://github.com/stanixdor/obs-variable-delay/releases/latest)
+[![Build](https://github.com/stanixdor/obs-variable-delay/actions/workflows/push.yaml/badge.svg?branch=main)](https://github.com/stanixdor/obs-variable-delay/actions/workflows/push.yaml)
 [![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](LICENSE)
 [![OBS Studio 32.2.x](https://img.shields.io/badge/OBS%20Studio-32.2.x-302E31)](https://obsproject.com/)
 
-[Website](https://www.obsdelay.com) · [Latest release](https://github.com/stanixdor/obs-variable-delay-web/releases/latest) · [English guide](docs/guide.en.md) · [Guía en español](docs/guide.es.md)
+[Website](https://www.obsdelay.com) · [Latest release](https://github.com/stanixdor/obs-variable-delay/releases/latest) · [English guide](docs/guide.en.md) · [Guía en español](docs/guide.es.md)
 
 </div>
 
@@ -42,10 +42,10 @@ x86_64.
 
 | Platform | Recommended download | Alternatives |
 | --- | --- | --- |
-| macOS 13+ (Apple Silicon and Intel) | [Universal ZIP](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal.zip) | [Universal PKG — unsigned/not notarized](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal.pkg) · [Debug symbols](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal-dSYMs.tar.xz) |
-| Windows 10/11 x64 | [Windows ZIP](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-windows-x64.zip) | [Debug symbols](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-windows-x64-symbols.zip) |
-| Ubuntu 24.04 x86_64 | [Debian package](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-linux-gnu.deb) | [Native tar.xz](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-ubuntu-gnu.tar.xz) · [Debug symbols](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-linux-gnu-dbgsym.ddeb) |
-| Source | [Source tarball](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-source.tar.xz) | [All assets and checksums](https://github.com/stanixdor/obs-variable-delay-web/releases/tag/1.1.1) |
+| macOS 13+ (Apple Silicon and Intel) | [Universal ZIP](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal.zip) | [Universal PKG — unsigned/not notarized](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal.pkg) · [Debug symbols](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal-dSYMs.tar.xz) |
+| Windows 10/11 x64 | [Windows ZIP](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-windows-x64.zip) | [Debug symbols](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-windows-x64-symbols.zip) |
+| Ubuntu 24.04 x86_64 | [Debian package](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-linux-gnu.deb) | [Native tar.xz](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-ubuntu-gnu.tar.xz) · [Debug symbols](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-linux-gnu-dbgsym.ddeb) |
+| Source | [Source tarball](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-source.tar.xz) | [All assets and checksums](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.1) |
 
 Read the [1.1.1 release notes](docs/releases/1.1.1.md) before installing. The ZIP is the recommended macOS download:
 its plugin bundle is ad-hoc signed, while the alternative PKG is not signed with Developer ID and is not
@@ -152,10 +152,10 @@ x86_64 nativo.
 
 | Plataforma | Descarga recomendada | Alternativas |
 | --- | --- | --- |
-| macOS 13+ (Apple Silicon e Intel) | [ZIP universal](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal.zip) | [PKG universal — sin firma/notarización](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal.pkg) · [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal-dSYMs.tar.xz) |
-| Windows 10/11 x64 | [ZIP para Windows](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-windows-x64.zip) | [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-windows-x64-symbols.zip) |
-| Ubuntu 24.04 x86_64 | [Paquete Debian](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-linux-gnu.deb) | [tar.xz nativo](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-ubuntu-gnu.tar.xz) · [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-linux-gnu-dbgsym.ddeb) |
-| Código fuente | [Tarball de fuentes](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-source.tar.xz) | [Todos los archivos y checksums](https://github.com/stanixdor/obs-variable-delay-web/releases/tag/1.1.1) |
+| macOS 13+ (Apple Silicon e Intel) | [ZIP universal](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal.zip) | [PKG universal — sin firma/notarización](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal.pkg) · [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal-dSYMs.tar.xz) |
+| Windows 10/11 x64 | [ZIP para Windows](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-windows-x64.zip) | [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-windows-x64-symbols.zip) |
+| Ubuntu 24.04 x86_64 | [Paquete Debian](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-linux-gnu.deb) | [tar.xz nativo](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-ubuntu-gnu.tar.xz) · [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-linux-gnu-dbgsym.ddeb) |
+| Código fuente | [Tarball de fuentes](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.1/obs-dynamic-delay-1.1.1-source.tar.xz) | [Todos los archivos y checksums](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.1) |
 
 Lee las [notas de la versión 1.1.1](docs/releases/1.1.1.md) antes de instalar. El ZIP es la descarga recomendada para
 macOS: su bundle lleva firma ad hoc, mientras que el PKG alternativo no tiene firma Developer ID ni está notarizado
