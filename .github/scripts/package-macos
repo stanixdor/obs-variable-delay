@@ -130,7 +130,7 @@ package() {
     }
 
     if (( codesign && notarize )) {
-      if ! [[ ${CODESIGN_IDENT} != '-' && ${CODESIGN_TEAM} && {CODESIGN_IDENT_USER} && ${CODESIGN_IDENT_PASS} ]] {
+      if ! [[ ${CODESIGN_IDENT} != '-' && ${CODESIGN_TEAM} && ${CODESIGN_IDENT_USER} && ${CODESIGN_IDENT_PASS} ]] {
         log_error "Notarization requires Apple ID and application password."
         return 2
       }
@@ -159,6 +159,36 @@ package() {
     XZ_OPT=-T0 tar -cvJf ${project_root}/release/${output_name}.tar.xz ${product_name}.plugin
     popd
   }
+
+  log_group "Archiving ${product_name} universal ZIP..."
+  local archive_staging_root
+  archive_staging_root="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/obs-plugin-package.XXXXXX")"
+  local archive_root="${archive_staging_root}/${output_name}"
+  local archive_path="${project_root}/release/${output_name}.zip"
+
+  mkdir -p ${archive_root}
+  COPYFILE_DISABLE=1 /usr/bin/ditto --norsrc --noextattr --noacl \
+    ${project_root}/release/${config}/${product_name}.plugin \
+    ${archive_root}/${product_name}.plugin
+  cp ${project_root}/README.md ${project_root}/LICENSE ${archive_root}
+
+  /usr/bin/xattr -cr ${archive_root}
+  find ${archive_root} \( -name '.DS_Store' -o -name '._*' -o -name '__MACOSX' \) -delete
+  find ${archive_root} -exec touch -h -t 198001010000 {} +
+
+  rm -f ${archive_path}
+  pushd ${archive_staging_root}
+  LC_ALL=C find ${output_name} -print | LC_ALL=C sort | \
+    COPYFILE_DISABLE=1 zip -X -q ${archive_path} -@
+  popd
+  rm -rf ${archive_staging_root}
+
+  unzip -tq ${archive_path}
+  if unzip -Z1 ${archive_path} | grep -Eq '(^|/)(\._[^/]*|\.DS_Store|__MACOSX)(/|$)'; then
+    rm -f ${archive_path}
+    log_error 'macOS ZIP contains AppleDouble or Finder metadata.'
+    return 2
+  fi
 
   if [[ ${config} == Release ]] {
     log_group "Archiving ${product_name} Debug Symbols..."

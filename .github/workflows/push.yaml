@@ -8,9 +8,38 @@ on:
       - 'release/**'
     tags:
       - '*'
+
 permissions:
-  contents: write
+  contents: read
+
 jobs:
+  website:
+    name: Validate Website 🌐
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+        working-directory: website
+    steps:
+      - name: Check Out Repository 📥
+        uses: actions/checkout@v4
+
+      - name: Set Up Node.js 24 🟢
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install Website Dependencies 📦
+        run: npm ci
+
+      - name: Lint Website 🧹
+        run: npm run lint
+
+      - name: Build Website 🏗️
+        run: npm run build
+
   check-format:
     name: Check Formatting 🔍
     if: github.ref_name == 'master' || github.ref_name == 'main'
@@ -26,93 +55,146 @@ jobs:
       contents: read
 
   create-release:
-    name: Create Release 🛫
+    name: Create Release 🛰️
     if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
-    needs: build-project
+    needs: [build-project, website]
+    permissions:
+      contents: write
     defaults:
       run:
         shell: bash
     steps:
-      - name: Check Release Tag ☑️
-        id: check
-        run: |
-          : Check Release Tag ☑️
-          if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
-          shopt -s extglob
+      - name: Check Out Release Metadata 📥
+        uses: actions/checkout@v4
 
-          case "${GITHUB_REF_NAME}" in
-            +([0-9]).+([0-9]).+([0-9]) )
-              echo 'validTag=true' >> $GITHUB_OUTPUT
-              echo 'prerelease=false' >> $GITHUB_OUTPUT
-              echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
-              ;;
-            +([0-9]).+([0-9]).+([0-9])-@(beta|rc)*([0-9]) )
-              echo 'validTag=true' >> $GITHUB_OUTPUT
-              echo 'prerelease=true' >> $GITHUB_OUTPUT
-              echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
-              ;;
-            *) echo 'validTag=false' >> $GITHUB_OUTPUT ;;
-          esac
+      - name: Check Release Tag and Notes ☑️
+        id: check
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          : Check Release Tag and Notes ☑️
+          set -Eeuo pipefail
+          if [[ "${RUNNER_DEBUG:-}" ]]; then set -x; fi
+
+          if [[ "${TAG_NAME}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            prerelease=false
+          elif [[ "${TAG_NAME}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(beta|rc)[0-9]+$ ]]; then
+            prerelease=true
+          else
+            echo "::error::Release tag '${TAG_NAME}' is not a supported semantic version."
+            exit 2
+          fi
+
+          package_version="$(jq -er '.version' buildspec.json)"
+          if [[ "${TAG_NAME%%-*}" != "${package_version}" ]]; then
+            echo "::error::Release tag '${TAG_NAME}' does not match buildspec version '${package_version}'."
+            exit 2
+          fi
+
+          release_notes="${GITHUB_WORKSPACE}/docs/releases/${TAG_NAME}.md"
+          if [[ ! -s "${release_notes}" ]]; then
+            echo "::error::Missing bilingual release notes: docs/releases/${TAG_NAME}.md"
+            exit 2
+          fi
+
+          {
+            echo "prerelease=${prerelease}"
+            echo "version=${TAG_NAME}"
+            echo "packageVersion=${package_version}"
+            echo "releaseNotes=${release_notes}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Download Build Artifacts 📥
         uses: actions/download-artifact@v4
-        if: fromJSON(steps.check.outputs.validTag)
-        id: download
+        with:
+          path: ${{ runner.temp }}/release-artifacts
 
-      - name: Rename Files 🏷️
-        if: fromJSON(steps.check.outputs.validTag)
+      - name: Collect and Verify Release Assets 📦
+        id: assets
+        env:
+          ARTIFACT_ROOT: ${{ runner.temp }}/release-artifacts
+          PACKAGE_VERSION: ${{ steps.check.outputs.packageVersion }}
+          RELEASE_NOTES: ${{ steps.check.outputs.releaseNotes }}
         run: |
-          : Rename Files 🏷️
-          if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
-          shopt -s extglob
-          shopt -s nullglob
+          : Collect and Verify Release Assets 📦
+          set -Eeuo pipefail
+          if [[ "${RUNNER_DEBUG:-}" ]]; then set -x; fi
 
-          root_dir="$(pwd)"
-          commit_hash="${GITHUB_SHA:0:9}"
+          plugin_name="$(jq -er '.name' buildspec.json)"
+          release_dir="${RUNNER_TEMP}/release-assets"
+          release_body="${RUNNER_TEMP}/RELEASE_NOTES.md"
+          mkdir -p "${release_dir}"
 
-          variants=(
-            'windows-x64;zip'
-            'macos-universal;tar.xz|pkg'
-            'ubuntu-24.04-x86_64;tar.xz|deb|ddeb'
-            'sources;tar.xz'
+          while IFS= read -r -d '' candidate; do
+            filename="${candidate##*/}"
+            case "${filename}" in
+              "${plugin_name}-${PACKAGE_VERSION}-"*.zip | \
+              "${plugin_name}-${PACKAGE_VERSION}-"*.pkg | \
+              "${plugin_name}-${PACKAGE_VERSION}-"*.deb | \
+              "${plugin_name}-${PACKAGE_VERSION}-"*.ddeb | \
+              "${plugin_name}-${PACKAGE_VERSION}-"*.tar.xz)
+                ;;
+              *)
+                continue
+                ;;
+            esac
+
+            if [[ -e "${release_dir}/${filename}" ]]; then
+              echo "::error::Duplicate release asset '${filename}'."
+              exit 2
+            fi
+            install -m 0644 "${candidate}" "${release_dir}/${filename}"
+          done < <(find "${ARTIFACT_ROOT}" -type f -print0)
+
+          required_assets=(
+            "${plugin_name}-${PACKAGE_VERSION}-windows-x64.zip"
+            "${plugin_name}-${PACKAGE_VERSION}-windows-x64-symbols.zip"
+            "${plugin_name}-${PACKAGE_VERSION}-macos-universal.pkg"
+            "${plugin_name}-${PACKAGE_VERSION}-macos-universal.zip"
+            "${plugin_name}-${PACKAGE_VERSION}-macos-universal-dSYMs.tar.xz"
+            "${plugin_name}-${PACKAGE_VERSION}-x86_64-ubuntu-gnu.tar.xz"
+            "${plugin_name}-${PACKAGE_VERSION}-x86_64-linux-gnu.deb"
+            "${plugin_name}-${PACKAGE_VERSION}-x86_64-linux-gnu-dbgsym.ddeb"
+            "${plugin_name}-${PACKAGE_VERSION}-source.tar.xz"
           )
 
-          for variant_data in "${variants[@]}"; do
-            IFS=';' read -r variant suffix <<< "${variant_data}"
-
-            candidates=(*-${variant}-${commit_hash}/@(*|*-dbgsym).@(${suffix}))
-
-            for candidate in "${candidates[@]}"; do
-              mv "${candidate}" "${root_dir}"
-            done
+          for filename in "${required_assets[@]}"; do
+            if [[ ! -s "${release_dir}/${filename}" ]]; then
+              echo "::error::Required release asset is missing or empty: ${filename}"
+              exit 2
+            fi
           done
 
-      - name: Generate Checksums 🪪
-        if: fromJSON(steps.check.outputs.validTag)
-        run: |
-          : Generate Checksums 🪪
-          if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
-          shopt -s extglob
+          pushd "${release_dir}" > /dev/null
+          : > SHA256SUMS.txt
+          while IFS= read -r asset_path; do
+            filename="${asset_path#./}"
+            sha256sum "${filename}" >> SHA256SUMS.txt
+          done < <(find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -print | LC_ALL=C sort)
+          sha256sum --check SHA256SUMS.txt
+          popd > /dev/null
 
-          echo "### Checksums" > ${{ github.workspace }}/CHECKSUMS.txt
-          for file in ${{ github.workspace }}/@(*.deb|*.ddeb|*.pkg|*.tar.xz|*.zip); do
-            echo "    ${file##*/}: $(sha256sum "${file}" | cut -d " " -f 1)" >> ${{ github.workspace }}/CHECKSUMS.txt
-          done
+          cp "${RELEASE_NOTES}" "${release_body}"
+          {
+            printf '\n## SHA-256 checksums / Sumas de comprobación SHA-256\n\n```text\n'
+            cat "${release_dir}/SHA256SUMS.txt"
+            printf '```\n'
+          } >> "${release_body}"
 
-      - name: Create Release 🛫
-        if: fromJSON(steps.check.outputs.validTag)
-        id: create_release
+          {
+            echo "directory=${release_dir}"
+            echo "body=${release_body}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Create Draft Release 🛰️
         uses: softprops/action-gh-release@9d7c94cfd0a1f3ed45544c887983e9fa900f0564
         with:
           draft: true
           prerelease: ${{ fromJSON(steps.check.outputs.prerelease) }}
           tag_name: ${{ steps.check.outputs.version }}
           name: ${{ needs.build-project.outputs.pluginName }} ${{ steps.check.outputs.version }}
-          body_path: ${{ github.workspace }}/CHECKSUMS.txt
+          body_path: ${{ steps.assets.outputs.body }}
+          fail_on_unmatched_files: true
           files: |
-            ${{ github.workspace }}/*.zip
-            ${{ github.workspace }}/*.pkg
-            ${{ github.workspace }}/*.deb
-            ${{ github.workspace }}/*.ddeb
-            ${{ github.workspace }}/*.tar.xz
+            ${{ steps.assets.outputs.directory }}/*

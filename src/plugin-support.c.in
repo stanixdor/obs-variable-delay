@@ -1,6 +1,8 @@
 /*
-Plugin Name
-Copyright (C) <Year> <Developer> <Email Address>
+OBS Dynamic Delay
+Copyright (C) 2026 Aritz
+
+SPDX-License-Identifier: GPL-2.0-or-later
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

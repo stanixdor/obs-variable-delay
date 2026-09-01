@@ -26,6 +26,59 @@ if ( $PSVersionTable.PSVersion -lt '7.2.0' ) {
     exit 2
 }
 
+function New-DeterministicZip {
+    param(
+        [Parameter(Mandatory)]
+        [string] $SourceDirectory,
+        [Parameter(Mandatory)]
+        [string] $DestinationPath
+    )
+
+    Add-Type -AssemblyName System.IO.Compression
+
+    if ( Test-Path -LiteralPath $DestinationPath ) {
+        Remove-Item -LiteralPath $DestinationPath -Force
+    }
+
+    $SourceRoot = ( Resolve-Path -LiteralPath $SourceDirectory ).Path
+    $ArchiveStream = [System.IO.File]::Open(
+        $DestinationPath,
+        [System.IO.FileMode]::CreateNew,
+        [System.IO.FileAccess]::Write,
+        [System.IO.FileShare]::None
+    )
+    $Archive = [System.IO.Compression.ZipArchive]::new(
+        $ArchiveStream,
+        [System.IO.Compression.ZipArchiveMode]::Create,
+        $false
+    )
+
+    try {
+        $ArchiveTimestamp = [System.DateTimeOffset]::new(1980, 1, 1, 0, 0, 0, [System.TimeSpan]::Zero)
+        $Files = Get-ChildItem -LiteralPath $SourceRoot -File -Recurse | Sort-Object {
+            [System.IO.Path]::GetRelativePath($SourceRoot, $_.FullName).Replace('\', '/')
+        }
+
+        foreach ( $File in $Files ) {
+            $RelativePath = [System.IO.Path]::GetRelativePath($SourceRoot, $File.FullName).Replace('\', '/')
+            $Entry = $Archive.CreateEntry($RelativePath, [System.IO.Compression.CompressionLevel]::Optimal)
+            $Entry.LastWriteTime = $ArchiveTimestamp
+
+            $InputStream = [System.IO.File]::OpenRead($File.FullName)
+            $OutputStream = $Entry.Open()
+            try {
+                $InputStream.CopyTo($OutputStream)
+            } finally {
+                $OutputStream.Dispose()
+                $InputStream.Dispose()
+            }
+        }
+    } finally {
+        $Archive.Dispose()
+        $ArchiveStream.Dispose()
+    }
+}
+
 function Package {
     trap {
         Write-Error $_
@@ -48,6 +101,7 @@ function Package {
     $ProductVersion = $BuildSpec.version
 
     $OutputName = "${ProductName}-${ProductVersion}-windows-${Target}"
+    $SymbolsOutputName = "${OutputName}-symbols"
 
     $RemoveArgs = @{
         ErrorAction = 'SilentlyContinue'
@@ -67,11 +121,12 @@ function Package {
     }
 
     $ArchiveStagingRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath "obs-plugin-package-$([guid]::NewGuid().ToString('N'))"
+    $SymbolsStagingRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath "obs-plugin-symbols-$([guid]::NewGuid().ToString('N'))"
     New-Item -ItemType 'Directory' -Path $ArchiveStagingRoot | Out-Null
+    New-Item -ItemType 'Directory' -Path $SymbolsStagingRoot | Out-Null
 
     try {
         Copy-Item -LiteralPath $InstallItems.FullName -Destination $ArchiveStagingRoot -Recurse
-        Get-ChildItem -LiteralPath $ArchiveStagingRoot -Filter '*.pdb' -File -Recurse -Force | Remove-Item -Force
 
         $PackageRoot = Join-Path -Path $ArchiveStagingRoot -ChildPath $ProductName
         if ( ! ( Test-Path -LiteralPath $PackageRoot -PathType Container ) ) {
@@ -80,15 +135,31 @@ function Package {
         Copy-Item -LiteralPath "${ProjectRoot}/README.md" -Destination $PackageRoot
         Copy-Item -LiteralPath "${ProjectRoot}/LICENSE" -Destination $PackageRoot
 
-        $CompressArgs = @{
-            Path = (Get-ChildItem -LiteralPath $ArchiveStagingRoot).FullName
-            CompressionLevel = 'Optimal'
-            DestinationPath = "${ProjectRoot}/release/${OutputName}.zip"
-            Verbose = ($Env:CI -ne $null)
+        $PluginPdb = Join-Path -Path $PackageRoot -ChildPath "bin/64bit/${ProductName}.pdb"
+        if ( ! ( Test-Path -LiteralPath $PluginPdb -PathType Leaf ) ) {
+            throw "Plugin debug symbols not found: ${PluginPdb}"
         }
-        Compress-Archive -Force @CompressArgs
+
+        $SymbolsPackageRoot = Join-Path -Path $SymbolsStagingRoot -ChildPath $SymbolsOutputName
+        New-Item -ItemType 'Directory' -Path $SymbolsPackageRoot | Out-Null
+        Copy-Item -LiteralPath $PluginPdb -Destination $SymbolsPackageRoot
+        Copy-Item -LiteralPath "${ProjectRoot}/README.md" -Destination $SymbolsPackageRoot
+        Copy-Item -LiteralPath "${ProjectRoot}/LICENSE" -Destination $SymbolsPackageRoot
+
+        Get-ChildItem -LiteralPath $ArchiveStagingRoot -Filter '*.pdb' -File -Recurse -Force | Remove-Item -Force
+        if ( Get-ChildItem -LiteralPath $ArchiveStagingRoot -Filter '*.pdb' -File -Recurse -Force ) {
+            throw 'The main Windows package still contains debug symbols.'
+        }
+
+        New-DeterministicZip `
+            -SourceDirectory $ArchiveStagingRoot `
+            -DestinationPath "${ProjectRoot}/release/${OutputName}.zip"
+        New-DeterministicZip `
+            -SourceDirectory $SymbolsStagingRoot `
+            -DestinationPath "${ProjectRoot}/release/${SymbolsOutputName}.zip"
     } finally {
         Remove-Item -LiteralPath $ArchiveStagingRoot -Recurse -Force -ErrorAction 'SilentlyContinue'
+        Remove-Item -LiteralPath $SymbolsStagingRoot -Recurse -Force -ErrorAction 'SilentlyContinue'
     }
     Log-Group
 }

@@ -6,16 +6,21 @@
 !/build-aux
 !/cmake
 !/data
+!/docs
 !/src
 !/tests
+!/website
 !.clang-format
 !.gersemirc
 !.gitignore
 !buildspec.json
+!CHANGELOG.md
 !CMakeLists.txt
 !CMakePresets.json
+!CONTRIBUTING.md
 !LICENSE
 !README.md
+!SECURITY.md
 
 # Exclude lock files
 *.lock.json

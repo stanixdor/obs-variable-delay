@@ -1,268 +1,239 @@
 # OBS Dynamic Delay
 
-Plugin nativo para OBS Studio que permite **añadir, cancelar, cambiar o quitar delay sin detener la emisión ni la grabación**. Trabaja sobre los paquetes ya comprimidos que OBS entrega al output, por lo que el coste estable es principalmente RAM y no una segunda codificación permanente.
+<div align="center">
 
-Versión: `1.1.1`<br>
-Compatibilidad de referencia: OBS Studio `32.2.x`, Qt 6, macOS 13+, Windows 10/11 x64 y Ubuntu 24.04 x86_64.
+**Variable output delay for OBS Studio — add, change, cancel, or remove delay without stopping your stream or recording.**
 
-La versión 1.1.1 corrige en **macOS, Windows y Linux** la detección de Hybrid MP4/MOV y RTMP de una sola pista
-en OBS 32: estos outputs anuncian capacidad multivídeo aunque no la estén usando. También corrige la ruta de
-instalación global en Windows y amplía el diagnóstico del encoder auxiliar en las tres plataformas.
+**Delay variable para OBS Studio — añade, cambia, cancela o elimina el delay sin detener el directo ni la grabación.**
 
-## Qué hace
+[![Latest release](https://img.shields.io/github/v/release/stanixdor/obs-variable-delay-web?display_name=tag&sort=semver&label=release)](https://github.com/stanixdor/obs-variable-delay-web/releases/latest)
+[![Build](https://github.com/stanixdor/obs-variable-delay-web/actions/workflows/push.yaml/badge.svg?branch=main)](https://github.com/stanixdor/obs-variable-delay-web/actions/workflows/push.yaml)
+[![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](LICENSE)
+[![OBS Studio 32.2.x](https://img.shields.io/badge/OBS%20Studio-32.2.x-302E31)](https://obsproject.com/)
 
-- Controla streaming y grabación activos de forma independiente, también cuando funcionan a la vez.
-- Permite elegir de 1 a 300 segundos con slider y campo numérico.
-- Activa, cancela o elimina el delay sin reiniciar el output.
-- Mantiene el uso normal de OBS: se pueden cambiar escenas y operar Studio con el delay activo.
-- Muestra una escena elegida mientras construye el buffer inicial.
-- Calcula la RAM prevista a partir del bitrate real observado o del bitrate configurado.
-- Incluye una vista de audiencia plegable, a 320×180 y 2 fps, que se captura únicamente mientras está abierta.
-- Reproduce audio durante la escena de espera mediante un mezclador privado; incluye modos de escena, fuente
-  dedicada, pista reservada y silencio explícito.
-- Conserva el layout de pistas del output y hace los empalmes de vídeo únicamente en keyframes.
-- Se rearma por separado tras una reconexión de streaming y vuelve a un estado seguro si detecta un formato no compatible o un límite de RAM.
+[Website](https://www.obsdelay.com) · [Latest release](https://github.com/stanixdor/obs-variable-delay-web/releases/latest) · [English guide](docs/guide.en.md) · [Guía en español](docs/guide.es.md)
 
-## Flujo exacto
+</div>
 
-1. El usuario elige duración y escena de espera y pulsa **Add delay**.
-2. El programa sigue en directo mientras se preparan encoders auxiliares compatibles, se valida el audio y se
-   espera un keyframe seguro.
-3. En ese keyframe, el output pasa a la escena de espera con el modo de audio elegido y el contenido normal
-   empieza a guardarse como paquetes comprimidos.
-4. Al completar el tiempo configurado, el output empieza a emitir ese buffer con el delay elegido. El encoder auxiliar se apaga.
-5. Al pulsar **Remove delay / cancel**, el plugin sigue entregando una salida válida hasta el siguiente keyframe vivo y vuelve entonces al directo, sin parar streaming o grabación.
+English | [Español](#español)
 
-Si se cancela durante la preparación o el llenado, el plugin vuelve del mismo modo a la señal viva. Cambiar segundos o escena con el delay activo ejecuta un rearme automático con la nueva configuración; el output permanece activo.
+## English
 
-## Audio de la escena de espera
+OBS Dynamic Delay is a native OBS Studio plugin for introducing a variable delay into an active streaming or
+recording output. It buffers the encoded packets that OBS already produces, so an active delay primarily costs RAM
+instead of requiring permanent decoding and re-encoding.
 
-El modo predeterminado es **Scene mix (recommended)**. Libobs renderiza la escena de espera en una vista privada;
-el plugin copia su PCM ya mezclado a una FIFO SPSC acotada y lo entrega a un reloj de audio privado. No asigna,
-silencia ni modifica fuentes, pistas o buses globales de OBS.
+Version **1.1.1** supports OBS Studio 32.2.x and Qt 6 on macOS 13+, Windows 10/11 x64, and native Ubuntu 24.04
+x86_64.
 
-- **Scene mix:** conserva el routing de pistas de las fuentes de la escena. Es la opción normal.
-- **Dedicated source:** usa una única fuente de audio exclusiva para la espera. Conserva la asignación de pistas
-  de esa fuente.
-- **Reserved OBS track (advanced):** toma el mix de una pista OBS 1-6 reservada y lo replica en las pistas de
-  audio del output de espera. Esa pista no puede estar siendo codificada por ningún output activo.
-- **Silence:** silencio intencional, útil como política explícita o para diagnosticar configuraciones.
+### Highlights
 
-Antes de cada activación se hace un *preflight* conservador que recorre escenas, grupos, elementos ocultos,
-canvases, fuentes y outputs activos. Si `Scene mix` comparte una fuente de audio con otra escena o con Program,
-se usa la fuente dedicada configurada cuando es exclusiva; si tampoco es segura, sólo el audio de espera cae a
-silencio. El vídeo y el delay siguen funcionando. Si la topología cambia durante el llenado, la degradación a
-silencio queda fijada hasta la siguiente activación para evitar duplicar audio en Program.
+- Add 1–300 seconds of delay without restarting streaming or recording.
+- Cancel while the initial buffer is filling, or return to live on the next safe keyframe.
+- Change scenes and continue using OBS normally while delay is active.
+- Select a hold scene that is shown while the buffer is built.
+- Keep hold-scene audio through a private mixer without changing global OBS tracks, buses, or sources.
+- Estimate RAM from the observed or configured bitrate.
+- Open an optional low-cost audience preview only when needed.
+- Control simultaneous streaming and recording outputs independently.
+- Support normal single-video-track Hybrid MP4/MOV, RTMP, and FLV outputs in OBS 32.
 
-Para configurar **Reserved OBS track**:
+### Download 1.1.1
 
-1. En **Propiedades de audio avanzadas**, asigna a la pista elegida únicamente las fuentes de la escena de espera.
-2. Quita esa pista de todas las demás fuentes.
-3. No selecciones esa pista para streaming, grabación, Replay Buffer, Virtual Camera ni otro output/plugin activo.
-4. Selecciona la misma pista en el panel. El diagnóstico debe confirmar que es exclusiva antes de activar el delay.
+| Platform | Recommended download | Alternatives |
+| --- | --- | --- |
+| macOS 13+ (Apple Silicon and Intel) | [Universal ZIP](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal.zip) | [Universal PKG — unsigned/not notarized](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal.pkg) · [Debug symbols](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal-dSYMs.tar.xz) |
+| Windows 10/11 x64 | [Windows ZIP](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-windows-x64.zip) | [Debug symbols](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-windows-x64-symbols.zip) |
+| Ubuntu 24.04 x86_64 | [Debian package](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-linux-gnu.deb) | [Native tar.xz](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-ubuntu-gnu.tar.xz) · [Debug symbols](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-linux-gnu-dbgsym.ddeb) |
+| Source | [Source tarball](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-source.tar.xz) | [All assets and checksums](https://github.com/stanixdor/obs-variable-delay-web/releases/tag/1.1.1) |
 
-## Instalación
+Read the [1.1.1 release notes](docs/releases/1.1.1.md) before installing. The ZIP is the recommended macOS download:
+its plugin bundle is ad-hoc signed, while the alternative PKG is not signed with Developer ID and is not
+Apple-notarized. The Windows DLL is not Authenticode-signed.
 
-### macOS
+### Quick installation
 
-1. Cierra OBS.
-2. Copia `obs-dynamic-delay.plugin` en:
+**macOS**
 
-   ```text
-   ~/Library/Application Support/obs-studio/plugins/
-   ```
+1. Close OBS.
+2. Copy <code>obs-dynamic-delay.plugin</code> from the recommended ZIP to
+   <code>~/Library/Application Support/obs-studio/plugins/</code>.
+3. Open OBS and select **Docks → Dynamic Delay**.
 
-3. Abre OBS y activa **Paneles/Docks → Delay dinámico**.
+**Windows x64**
 
-El artefacto local está firmado *ad hoc*. No está notarizado con una cuenta Apple Developer, por lo que macOS puede pedir autorización al instalarlo fuera de este equipo.
+1. Close OBS.
+2. Extract the complete <code>obs-dynamic-delay</code> folder from the ZIP into
+   <code>%PROGRAMDATA%\obs-studio\plugins\</code>.
+3. Confirm that the DLL is at
+   <code>%PROGRAMDATA%\obs-studio\plugins\obs-dynamic-delay\bin\64bit\obs-dynamic-delay.dll</code>.
+4. Open OBS and select **Docks → Dynamic Delay**.
 
-### Windows x64
+Do not copy loose <code>bin</code> and <code>data</code> folders into the OBS installation directory, and do not use
+<code>%APPDATA%</code>.
 
-1. Cierra OBS.
-2. Abre esta ruta en la barra de direcciones del Explorador de archivos (la carpeta `ProgramData` está oculta
-   normalmente). Si `obs-studio\plugins` no existe, créala; Windows puede pedir permisos de administrador:
+**Ubuntu 24.04 x86_64**
 
-   ```text
-   %PROGRAMDATA%\obs-studio\plugins\
-   ```
-
-3. Extrae ahí **la carpeta completa `obs-dynamic-delay`** del ZIP. No copies `bin` y `data` sueltas en la
-   carpeta de instalación de OBS y no uses `%APPDATA%`.
-4. Comprueba que el DLL termine exactamente en:
-
-   ```text
-   %PROGRAMDATA%\obs-studio\plugins\obs-dynamic-delay\bin\64bit\obs-dynamic-delay.dll
-   ```
-
-   También puedes comprobarlo desde PowerShell:
-
-   ```powershell
-   Test-Path "$env:ProgramData\obs-studio\plugins\obs-dynamic-delay\bin\64bit\obs-dynamic-delay.dll"
-   ```
-
-   El resultado debe ser `True`.
-5. Abre OBS y activa **Paneles/Docks → Dynamic Delay**.
-
-Estas rutas corresponden a una instalación normal, no portable, de OBS. Si el panel no aparece, abre
-**Ayuda → Archivos de registro → Ver registro actual** y comprueba que `obs-dynamic-delay.dll` figure entre los
-módulos cargados.
-
-Si el panel muestra **ERROR / LIVE FALLBACK**, lee primero el texto pequeño situado debajo del estado: contiene
-la causa exacta. El mismo motivo aparece en el registro con el prefijo `[obs-dynamic-delay]`. Al solicitar ayuda,
-adjunta el registro generado después de reproducir el fallo; los registros están en `%APPDATA%\obs-studio\logs\`.
-
-El DLL incluido no lleva firma Authenticode. La firma para distribución pública requiere un certificado de firma de código del editor.
-
-### Ubuntu 24.04 x86_64
-
-La opción recomendada para una instalación nativa es el paquete Debian. Requiere OBS Studio 32.2 o posterior;
-si esa versión no está en los repositorios configurados, puede obtenerse desde el PPA oficial de OBS:
-
-```bash
+~~~bash
 sudo add-apt-repository ppa:obsproject/obs-studio
 sudo apt update
 sudo apt install ./obs-dynamic-delay-1.1.1-x86_64-linux-gnu.deb
-```
+~~~
 
-Como archivo alternativo, el `tar.xz` contiene el layout estándar `lib/share` para `/usr`:
+Restart OBS and select **Docks → Dynamic Delay**.
 
-```bash
-sudo tar -xJf obs-dynamic-delay-1.1.1-x86_64-ubuntu-gnu.tar.xz -C /usr
-```
+For complete installation, audio-routing, usage, performance, architecture, and build instructions, read the
+**[English technical guide](docs/guide.en.md)**.
 
-Reinicia OBS y activa **Docks → Dynamic Delay**. Estos dos artefactos están construidos para OBS nativo en
-Ubuntu 24.04 x86_64; no se presentan como paquetes para Flatpak, Snap ni otras distribuciones.
+### How it works
 
-## Uso y rendimiento
+When delay is requested, the plugin prepares a compatible auxiliary encoder and waits for a safe keyframe. It then
+shows the selected hold scene while storing normal encoded content in RAM. Once the configured duration is filled,
+the buffered content becomes the output and the auxiliary encoder shuts down. Removing delay keeps a valid output
+until the next live keyframe and then returns directly to live.
 
-La estimación de memoria usa `bitrate total × segundos ÷ 8`, con un margen del 20 %. Con CQP, CRF, ICQ, lossless o una pista sin bitrate fijo, el panel indica que está midiendo y muestra el valor real tras una ventana de dos segundos de output. Al abrir la vista de audiencia se suma su historial RGB16; en el peor caso de 300 segundos son aproximadamente 67 MiB adicionales. El buffer principal tiene un límite de seguridad de 4 GiB y el preroll auxiliar uno de 128 MiB.
+~~~text
+LIVE → PREPARING → FILLING → DELAY ACTIVE → RETURNING LIVE → LIVE
+                    ↘ cancellation ────────────────↗
+~~~
 
-Durante **Preparing/Filling** se crea un segundo encoder de vídeo con la misma configuración que el output. Esto es necesario para producir la escena de espera con headers compatibles. Se destruye al entrar en **Delay active**. Para el menor impacto al jugar:
+Video remains packet-based. The hold-scene audio uses a private bounded PCM bridge and supports **Scene mix**,
+**Dedicated source**, **Reserved OBS track**, and explicit **Silence** modes.
 
-- usa un encoder por hardware;
-- mantén cerrada la vista de audiencia cuando no la necesites;
-- evita ejecutar streaming y grabación con configuraciones distintas si no necesitas ambos outputs;
-- configura un intervalo de keyframes razonable (por ejemplo, 2 segundos), ya que todas las entradas y salidas esperan un keyframe seguro.
+### Performance and intentional limitations
 
-Streaming y grabación simultáneos comparten una sola vista, reloj y FIFO de la escena de espera. El puente PCM es
-fijo y acotado: 16 bloques × 1024 frames × 6 mixes × 8 canales, aproximadamente 3 MiB por activación, sin
-reservar audio proporcional a los segundos de delay. Su lookahead interno es de un quantum de OBS, unos 21,3 ms
-a 48 kHz.
+- Buffer memory is estimated as <code>total bitrate × seconds ÷ 8</code>, plus a 20% margin.
+- A temporary second video encoder runs only during **Preparing/Filling**.
+- Production transitions use **Cut on keyframe**. A true fade would require continuous decoding, compositing, and
+  re-encoding, which conflicts with the low-overhead goal.
+- Returning live waits for the next keyframe to preserve a decodable bitstream.
+- A one- or two-frame AAC gap can occur when switching audio encoders.
+- Raw, audio-only, video-only, OBS native-delay, and actual multivideo/Enhanced Broadcasting outputs are not
+  supported.
+- The audience preview approximates what OBS has sent; it does not include server, CDN, or player buffering.
 
-## Limitaciones deliberadas de la versión 1.1
+### Development
 
-- **Transición:** el modo de producción es `Cut on keyframe`. La opción de fade aparece deshabilitada porque un crossfade real entre vídeo ya retrasado y vídeo vivo exige decodificar, componer y volver a codificar toda la señal. Eso contradice el objetivo de bajo consumo y puede degradar imagen y latencia.
-- **Empalme de audio:** el cambio entre el encoder principal y el auxiliar puede introducir un hueco muy breve de
-  una o dos tramas AAC. No existe ya el silencio de varios segundos durante el llenado.
-- **Seguridad de audio:** una fuente compartida o una pista reservada que deje de ser exclusiva provoca silencio
-  sólo en la escena de espera. El plugin no altera el routing global para intentar corregirlo automáticamente.
-- **Quitar delay:** la vuelta es inmediata en términos de control, pero el empalme efectivo espera el siguiente keyframe para mantener el stream decodificable. El máximo habitual es el intervalo GOP configurado.
-- **Vista de audiencia:** representa aproximadamente los frames enviados por OBS. No incluye el buffer del servidor, CDN ni reproductor del espectador. Durante la escena de espera muestra su estado en lugar de mantener otra renderización auxiliar.
-- Se admiten outputs codificados con audio y vídeo. Hybrid MP4/MOV y RTMP normales son compatibles cuando
-  tienen exactamente una pista de vídeo activa. No se admiten outputs raw, solo-audio, solo-vídeo, el delay
-  nativo de OBS ni layouts con varias pistas de vídeo como `Enhanced Broadcasting`.
-- El binario Windows se compila y valida estructuralmente contra la distribución oficial de OBS 32.2.2; la prueba funcional completa de esta entrega se ha realizado en macOS arm64.
+The repository contains the native C++ plugin at the root and the Next.js website under <code>website/</code>.
+Builds and tests run for universal macOS, Windows x64, and Ubuntu 24.04 x86_64.
 
-## Arquitectura
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+- [License](LICENSE)
 
-El callback síncrono de paquetes de cada output actúa como un portador de ritmo. El plugin conserva sus timestamps de pared, pista, encoder y timebase y sustituye únicamente el payload por el paquete correspondiente del buffer. Cada cambio de procedencia crea una nueva época temporal y aplica un puente común A/V cuando hace falta, evitando PTS no monótonos con encoders que usan B-frames.
+---
 
-El audio auxiliar no usa el bus de Program. Una fuente privada `COMPOSITE` participa en el árbol de render de
-audio de la vista auxiliar sin registrarse como fuente global de audio. El productor de libobs escribe bloques PCM
-fijos en una FIFO SPSC; el consumidor, que corre en el reloj privado, aplica una sola corrección de fase/sync y
-después avanza por frames para evitar drift. Si el backend deja de ser seguro, un kill-switch atómico vacía la
-enumeración de audio sin desmontar la vista de vídeo. Los observadores usan conexiones RAII al `signal_handler`,
-por lo que no mantienen vivas escenas o fuentes creadas por otros plugins.
+[English](#english) | Español
 
-El estado por output es:
+## Español
 
-```text
+OBS Dynamic Delay es un plugin nativo para OBS Studio que introduce un delay variable en un output de streaming o
+grabación activo. Almacena los paquetes codificados que OBS ya produce, por lo que mantener el delay consume
+principalmente RAM y no exige decodificar y recodificar permanentemente.
+
+La versión **1.1.1** es compatible con OBS Studio 32.2.x y Qt 6 en macOS 13+, Windows 10/11 x64 y Ubuntu 24.04
+x86_64 nativo.
+
+### Funciones principales
+
+- Añade entre 1 y 300 segundos de delay sin reiniciar el directo ni la grabación.
+- Cancela mientras se llena el buffer inicial o vuelve a live en el siguiente keyframe seguro.
+- Permite cambiar de escena y seguir usando OBS normalmente con el delay activo.
+- Reproduce una escena de espera seleccionada mientras construye el buffer.
+- Mantiene el audio de la escena de espera mediante un mezclador privado sin cambiar pistas, buses ni fuentes
+  globales de OBS.
+- Estima la RAM a partir del bitrate observado o configurado.
+- Abre una vista de audiencia opcional y de bajo coste sólo cuando se necesita.
+- Controla de forma independiente streaming y grabación simultáneos.
+- Admite outputs Hybrid MP4/MOV, RTMP y FLV normales con una sola pista de vídeo en OBS 32.
+
+### Descargar 1.1.1
+
+| Plataforma | Descarga recomendada | Alternativas |
+| --- | --- | --- |
+| macOS 13+ (Apple Silicon e Intel) | [ZIP universal](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal.zip) | [PKG universal — sin firma/notarización](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal.pkg) · [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-macos-universal-dSYMs.tar.xz) |
+| Windows 10/11 x64 | [ZIP para Windows](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-windows-x64.zip) | [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-windows-x64-symbols.zip) |
+| Ubuntu 24.04 x86_64 | [Paquete Debian](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-linux-gnu.deb) | [tar.xz nativo](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-ubuntu-gnu.tar.xz) · [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-x86_64-linux-gnu-dbgsym.ddeb) |
+| Código fuente | [Tarball de fuentes](https://github.com/stanixdor/obs-variable-delay-web/releases/download/1.1.1/obs-dynamic-delay-1.1.1-source.tar.xz) | [Todos los archivos y checksums](https://github.com/stanixdor/obs-variable-delay-web/releases/tag/1.1.1) |
+
+Lee las [notas de la versión 1.1.1](docs/releases/1.1.1.md) antes de instalar. El ZIP es la descarga recomendada para
+macOS: su bundle lleva firma ad hoc, mientras que el PKG alternativo no tiene firma Developer ID ni está notarizado
+por Apple. El DLL de Windows no tiene firma Authenticode.
+
+### Instalación rápida
+
+**macOS**
+
+1. Cierra OBS.
+2. Copia <code>obs-dynamic-delay.plugin</code> del ZIP recomendado en
+   <code>~/Library/Application Support/obs-studio/plugins/</code>.
+3. Abre OBS y selecciona **Paneles/Docks → Delay dinámico**.
+
+**Windows x64**
+
+1. Cierra OBS.
+2. Extrae la carpeta completa <code>obs-dynamic-delay</code> del ZIP dentro de
+   <code>%PROGRAMDATA%\obs-studio\plugins\</code>.
+3. Comprueba que el DLL esté en
+   <code>%PROGRAMDATA%\obs-studio\plugins\obs-dynamic-delay\bin\64bit\obs-dynamic-delay.dll</code>.
+4. Abre OBS y selecciona **Paneles/Docks → Dynamic Delay**.
+
+No copies las carpetas <code>bin</code> y <code>data</code> sueltas en el directorio de instalación de OBS y no
+uses <code>%APPDATA%</code>.
+
+**Ubuntu 24.04 x86_64**
+
+~~~bash
+sudo add-apt-repository ppa:obsproject/obs-studio
+sudo apt update
+sudo apt install ./obs-dynamic-delay-1.1.1-x86_64-linux-gnu.deb
+~~~
+
+Reinicia OBS y selecciona **Docks → Dynamic Delay**.
+
+Para consultar la instalación completa, el routing de audio, el uso, el rendimiento, la arquitectura y la
+compilación, lee la **[guía técnica en español](docs/guide.es.md)**.
+
+### Cómo funciona
+
+Cuando se solicita el delay, el plugin prepara un encoder auxiliar compatible y espera un keyframe seguro. A
+continuación muestra la escena de espera seleccionada mientras almacena en RAM el contenido codificado normal. Al
+completar la duración configurada, el contenido del buffer pasa a ser el output y el encoder auxiliar se apaga.
+Quitar el delay mantiene un output válido hasta el siguiente keyframe vivo y entonces vuelve directamente a live.
+
+~~~text
 LIVE → PREPARING → FILLING → DELAY ACTIVE → RETURNING LIVE → LIVE
                     ↘ cancelación ────────────────↗
-```
+~~~
 
-El núcleo puro en `src/core/` modela colas por pista, generaciones, límites y mapeo temporal sin depender de OBS. El adaptador de `src/output-session.cpp` aplica la misma estrategia a `encoder_packet` y gestiona las peculiaridades del lifecycle real de libobs.
+El vídeo sigue trabajando con paquetes. El audio de la escena de espera usa un puente PCM privado y acotado, y
+admite los modos **Scene mix**, **Dedicated source**, **Reserved OBS track** y **Silence** explícito.
 
-APIs de OBS usadas como contrato:
+### Rendimiento y limitaciones deliberadas
 
-- [Callbacks de paquetes del output](https://docs.obsproject.com/reference-outputs#c.obs_output_add_packet_callback)
-- [Outputs y delay nativo](https://docs.obsproject.com/reference-outputs#c.obs_output_set_delay)
-- [Encoders](https://docs.obsproject.com/reference-encoders)
-- [Frontend API](https://docs.obsproject.com/reference-frontend-api)
-- [Displays y vistas](https://docs.obsproject.com/frontends#displays)
+- La memoria del buffer se estima como <code>bitrate total × segundos ÷ 8</code>, más un margen del 20 %.
+- Un segundo encoder de vídeo temporal funciona únicamente durante **Preparing/Filling**.
+- Las transiciones de producción usan **Cut on keyframe**. Un fade real exigiría decodificar, componer y
+  recodificar continuamente, lo que contradice el objetivo de bajo consumo.
+- La vuelta a live espera el siguiente keyframe para conservar un bitstream decodificable.
+- Al cambiar de encoder de audio puede aparecer un hueco de una o dos tramas AAC.
+- No se admiten outputs raw, sólo-audio, sólo-vídeo, el delay nativo de OBS ni multivídeo/Enhanced Broadcasting
+  real.
+- La vista de audiencia aproxima lo que OBS ha enviado; no incluye el buffer del servidor, CDN o reproductor.
 
-## Compilación
+### Desarrollo
 
-El proyecto parte del sistema oficial `obs-plugintemplate`; descarga y fija por hash las fuentes de OBS 32.2.2, `obs-deps` y Qt 6.11.1 definidos en `buildspec.json`.
+El repositorio contiene el plugin nativo en C++ en la raíz y la web Next.js dentro de <code>website/</code>. Los
+builds y tests se ejecutan para macOS universal, Windows x64 y Ubuntu 24.04 x86_64.
 
-### macOS arm64 local
+- [Cómo contribuir](CONTRIBUTING.md)
+- [Política de seguridad](SECURITY.md)
+- [Historial de cambios](CHANGELOG.md)
+- [Licencia](LICENSE)
 
-Requiere OBS 32.2.2 instalado en `/Applications/OBS.app`, Xcode Command Line Tools, CMake y Ninja:
+## License / Licencia
 
-```bash
-cmake --preset macos-local-arm64 -DENABLE_TESTS=ON
-cmake --build --preset macos-local-arm64 --parallel
-ctest --test-dir build_macos_arm64 --output-on-failure
-```
+OBS Dynamic Delay is distributed under **GPL-2.0-or-later**. See [LICENSE](LICENSE).
 
-### macOS universal
-
-Requiere Xcode 16 completo —no basta con Command Line Tools— y CMake 3.28 o posterior:
-
-```bash
-cmake --preset macos
-cmake --build --preset macos --config RelWithDebInfo --parallel
-cmake --build build_macos --target packet_delay_tests --config RelWithDebInfo --parallel
-ctest --test-dir build_macos --build-config RelWithDebInfo --output-on-failure
-```
-
-### Windows x64
-
-Desde un Developer PowerShell de Visual Studio 2022 con CMake 3.28+:
-
-```powershell
-cmake --preset windows-x64
-cmake --build --preset windows-x64 --config RelWithDebInfo --parallel
-ctest --test-dir build_x64 --build-config RelWithDebInfo --output-on-failure
-cmake --install build_x64 --prefix release/RelWithDebInfo --config RelWithDebInfo
-```
-
-### Ubuntu 24.04 x86_64
-
-Requiere CMake 3.28+, Ninja, GCC, Qt 6 y la instalación nativa de OBS Studio 32.2.x con sus archivos de desarrollo:
-
-```bash
-cmake --preset ubuntu-x86_64
-cmake --build --preset ubuntu-x86_64 --parallel
-ctest --test-dir build_x86_64 --output-on-failure
-cmake --install build_x86_64 --prefix release/RelWithDebInfo
-```
-
-Los workflows incluidos construyen y prueban macOS universal, Windows x64 y Ubuntu 24.04 x86_64 en GitHub
-Actions. Generan un ZIP para Windows, un PKG o `tar.xz` para macOS y un `tar.xz` más un paquete Debian para
-Linux. El tag de release debe coincidir con la versión de `buildspec.json`; se permiten sufijos de prerelease
-como `-beta2` o `-rc1`.
-
-## Validación realizada
-
-- 26 casos del núcleo de paquetes: delay exacto, cancelación, múltiples pistas, keyframes,
-  generaciones/rearmado, límites de memoria, timebases no unitarias y continuidad A/V.
-- 9 escenarios del puente de audio: FIFO acotada/concurrente, offsets positivos/negativos, discontinuidades,
-  fase 48 kHz, underrun y ausencia de drift.
-- Build estricto con warnings como errores.
-- Build nativo Linux x86_64 en Ubuntu 24.04 contra OBS Studio 32.2.0 y Qt 6.4.2; las dos suites pasan y
-  `ldd -r` no encuentra símbolos sin resolver.
-- Prueba de carga real del paquete Debian en OBS 32.2.0 bajo Docker/Xvfb/llvmpipe: el módulo 1.1.1 carga y
-  OBS completa el arranque. El cierre forzado por `SIGINT` del harness termina en segfault tanto con el plugin
-  como en el baseline sin él, por lo que ese entorno no se usa para certificar una descarga limpia.
-- ASan + UBSan y TSan sobre ambos núcleos, sin hallazgos.
-- Prueba real en OBS 32.2.2 macOS arm64: iniciar una grabación, cancelar durante `Preparing/Filling`, activar un
-  delay completo, cambiar Program de escena, abrir/cerrar el preview y volver a live sin detener el output.
-- Grabación de validación de 174,002 s: H.264 1920×1080 + AAC 48 kHz estéreo, decodificación completa sin
-  errores y 0 regresiones DTS en 10.425 paquetes de vídeo y 8.154 de audio.
-- Audio no silencioso medido durante ambas escenas de espera: −21,5 dB y −21,9 dB de volumen medio.
-- DLL Windows x64: formato PE32+ validado, ocho exports OBS presentes e imports resueltos contra la distribución oficial.
-
-## Licencia
-
-GPL-2.0-or-later. Consulta `LICENSE`.
+OBS Dynamic Delay se distribuye bajo **GPL-2.0-or-later**. Consulta [LICENSE](LICENSE).
