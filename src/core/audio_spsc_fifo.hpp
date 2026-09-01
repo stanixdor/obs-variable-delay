@@ -41,6 +41,31 @@ struct PcmAudioBlock {
 	}
 };
 
+namespace detail {
+
+inline constexpr std::size_t CacheLineSize = 64;
+static_assert(sizeof(std::atomic<uint64_t>) * 2 <= CacheLineSize);
+
+// Keep cache-line padding explicit: producer and consumer sequences remain on
+// separate lines, and MSVC does not need to add warning-worthy tail padding.
+struct alignas(CacheLineSize) CacheLineSequence {
+	std::atomic<uint64_t> value{0};
+	std::array<std::byte, CacheLineSize - sizeof(std::atomic<uint64_t>)> padding{};
+};
+
+struct alignas(CacheLineSize) CacheLineCounters {
+	std::atomic<uint64_t> dropped{0};
+	std::atomic<uint64_t> underruns{0};
+	std::array<std::byte, CacheLineSize - (sizeof(std::atomic<uint64_t>) * 2)> padding{};
+};
+
+static_assert(sizeof(CacheLineSequence) == CacheLineSize);
+static_assert(alignof(CacheLineSequence) == CacheLineSize);
+static_assert(sizeof(CacheLineCounters) == CacheLineSize);
+static_assert(alignof(CacheLineCounters) == CacheLineSize);
+
+} // namespace detail
+
 /**
  * Bounded single-producer/single-consumer ring used between libobs's main
  * mixer and the private hold encoder.  A slot stays owned by its caller until
@@ -53,56 +78,58 @@ public:
 
 	[[nodiscard]] PcmAudioBlock *begin_push() noexcept
 	{
-		const uint64_t write = writeSequence_.load(std::memory_order_relaxed);
-		const uint64_t read = readSequence_.load(std::memory_order_acquire);
+		const uint64_t write = writeSequence_.value.load(std::memory_order_relaxed);
+		const uint64_t read = readSequence_.value.load(std::memory_order_acquire);
 		if (write - read >= Capacity) {
-			dropped_.fetch_add(1, std::memory_order_relaxed);
+			counters_.dropped.fetch_add(1, std::memory_order_relaxed);
 			return nullptr;
 		}
 		return &slots_[static_cast<std::size_t>(write % Capacity)];
 	}
 
-	void commit_push() noexcept { writeSequence_.fetch_add(1, std::memory_order_release); }
+	void commit_push() noexcept { writeSequence_.value.fetch_add(1, std::memory_order_release); }
 
 	[[nodiscard]] const PcmAudioBlock *begin_pop() noexcept
 	{
-		const uint64_t read = readSequence_.load(std::memory_order_relaxed);
-		const uint64_t write = writeSequence_.load(std::memory_order_acquire);
+		const uint64_t read = readSequence_.value.load(std::memory_order_relaxed);
+		const uint64_t write = writeSequence_.value.load(std::memory_order_acquire);
 		if (read == write) {
-			underruns_.fetch_add(1, std::memory_order_relaxed);
+			counters_.underruns.fetch_add(1, std::memory_order_relaxed);
 			return nullptr;
 		}
 		return &slots_[static_cast<std::size_t>(read % Capacity)];
 	}
 
-	void commit_pop() noexcept { readSequence_.fetch_add(1, std::memory_order_release); }
+	void commit_pop() noexcept { readSequence_.value.fetch_add(1, std::memory_order_release); }
 
 	[[nodiscard]] std::size_t size() const noexcept
 	{
-		const uint64_t write = writeSequence_.load(std::memory_order_acquire);
-		const uint64_t read = readSequence_.load(std::memory_order_acquire);
+		const uint64_t write = writeSequence_.value.load(std::memory_order_acquire);
+		const uint64_t read = readSequence_.value.load(std::memory_order_acquire);
 		return static_cast<std::size_t>(write - read);
 	}
 
-	[[nodiscard]] uint64_t dropped() const noexcept { return dropped_.load(std::memory_order_relaxed); }
-	[[nodiscard]] uint64_t underruns() const noexcept { return underruns_.load(std::memory_order_relaxed); }
+	[[nodiscard]] uint64_t dropped() const noexcept { return counters_.dropped.load(std::memory_order_relaxed); }
+	[[nodiscard]] uint64_t underruns() const noexcept
+	{
+		return counters_.underruns.load(std::memory_order_relaxed);
+	}
 
 	void reset() noexcept
 	{
 		// reset() is a lifecycle operation: producer and consumer must already
 		// be stopped.
-		readSequence_.store(0, std::memory_order_relaxed);
-		writeSequence_.store(0, std::memory_order_relaxed);
-		dropped_.store(0, std::memory_order_relaxed);
-		underruns_.store(0, std::memory_order_relaxed);
+		readSequence_.value.store(0, std::memory_order_relaxed);
+		writeSequence_.value.store(0, std::memory_order_relaxed);
+		counters_.dropped.store(0, std::memory_order_relaxed);
+		counters_.underruns.store(0, std::memory_order_relaxed);
 	}
 
 private:
 	std::array<PcmAudioBlock, Capacity> slots_{};
-	alignas(64) std::atomic<uint64_t> writeSequence_{0};
-	alignas(64) std::atomic<uint64_t> readSequence_{0};
-	std::atomic<uint64_t> dropped_{0};
-	std::atomic<uint64_t> underruns_{0};
+	detail::CacheLineSequence writeSequence_{};
+	detail::CacheLineSequence readSequence_{};
+	detail::CacheLineCounters counters_{};
 };
 
 /**
