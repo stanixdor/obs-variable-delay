@@ -20,10 +20,21 @@ enum class TransitionStyle {
 	FadeThroughBlack,
 };
 
+enum class HoldAudioMode {
+	SceneMix,
+	DedicatedSource,
+	ReservedTrack,
+	Silence,
+};
+
 struct DelaySettings {
 	uint32_t delaySeconds = 30;
 	TransitionStyle transition = TransitionStyle::Cut;
 	std::string holdSceneUuid;
+	HoldAudioMode holdAudioMode = HoldAudioMode::SceneMix;
+	std::string holdAudioSourceUuid;
+	// Stored as the user-facing OBS track number (1..MAX_AUDIO_MIXES).
+	uint32_t reservedAudioTrack = 6;
 	bool previewExpanded = false;
 };
 

@@ -18,6 +18,7 @@
 namespace dynamic_delay {
 
 class HoldPipeline;
+class HoldMediaHub;
 
 class OutputSession {
 public:
@@ -30,7 +31,7 @@ public:
 	OutputSession &operator=(const OutputSession &) = delete;
 
 	bool attach(std::string &error);
-	bool request_delay(uint32_t seconds, obs_source_t *holdScene, std::string &error);
+	bool request_delay(uint32_t seconds, std::shared_ptr<HoldMediaHub> mediaHub, std::string &error);
 	void request_bypass();
 	void maintenance();
 	void receive_hold_packet(encoder_packet *packet);

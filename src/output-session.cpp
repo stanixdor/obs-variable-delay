@@ -126,10 +126,10 @@ bool OutputSession::attach(std::string &error)
 	return true;
 }
 
-bool OutputSession::request_delay(const uint32_t seconds, obs_source_t *holdScene, std::string &error)
+bool OutputSession::request_delay(const uint32_t seconds, std::shared_ptr<HoldMediaHub> mediaHub, std::string &error)
 {
-	if (!holdScene) {
-		error = "Select a hold scene first.";
+	if (!mediaHub) {
+		error = "The shared hold media graph is not available.";
 		return false;
 	}
 	if (seconds == 0 || seconds > 300) {
@@ -170,7 +170,7 @@ bool OutputSession::request_delay(const uint32_t seconds, obs_source_t *holdScen
 		state_.store(DelayState::Preparing, std::memory_order_release);
 	}
 
-	std::unique_ptr<HoldPipeline> pipeline = std::make_unique<HoldPipeline>(*this, output_, holdScene);
+	std::unique_ptr<HoldPipeline> pipeline = std::make_unique<HoldPipeline>(*this, output_, std::move(mediaHub));
 	{
 		std::scoped_lock lock(mutex_);
 		holdPipeline_ = std::move(pipeline);

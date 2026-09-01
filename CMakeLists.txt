@@ -51,12 +51,18 @@ target_sources(
   PRIVATE
     src/audience-preview.cpp
     src/audience-preview.hpp
+    src/audio-preflight.cpp
+    src/audio-preflight.hpp
     src/delay-controller.cpp
     src/delay-controller.hpp
     src/delay-dock.cpp
     src/delay-dock.hpp
     src/delay-types.cpp
     src/delay-types.hpp
+    src/hold-audio-tap.cpp
+    src/hold-audio-tap.hpp
+    src/hold-media-hub.cpp
+    src/hold-media-hub.hpp
     src/hold-pipeline.cpp
     src/hold-pipeline.hpp
     src/obs-packet.hpp

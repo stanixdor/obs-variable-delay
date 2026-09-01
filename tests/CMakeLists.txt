@@ -20,3 +20,17 @@ target_link_libraries(packet_delay_tests PRIVATE Threads::Threads)
 
 enable_testing()
 add_test(NAME packet_delay_tests COMMAND packet_delay_tests)
+
+add_executable(audio_spsc_fifo_tests audio_spsc_fifo_tests.cpp)
+target_include_directories(audio_spsc_fifo_tests PRIVATE ../src)
+target_compile_features(audio_spsc_fifo_tests PRIVATE cxx_std_20)
+if(MSVC)
+  target_compile_options(audio_spsc_fifo_tests PRIVATE /W4 /permissive-)
+else()
+  target_compile_options(
+    audio_spsc_fifo_tests
+    PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion
+  )
+endif()
+target_link_libraries(audio_spsc_fifo_tests PRIVATE Threads::Threads)
+add_test(NAME audio_spsc_fifo_tests COMMAND audio_spsc_fifo_tests)

@@ -1,5 +1,6 @@
 #include "hold-pipeline.hpp"
 
+#include "hold-media-hub.hpp"
 #include "output-session.hpp"
 #include "plugin-support.h"
 
@@ -72,6 +73,13 @@ HoldPipeline::HoldPipeline(OutputSession &owner, obs_output_t *primaryOutput, ob
 {
 }
 
+HoldPipeline::HoldPipeline(OutputSession &owner, obs_output_t *primaryOutput, std::shared_ptr<HoldMediaHub> mediaHub)
+	: owner_(owner),
+	  primaryOutput_(obs_output_get_ref(primaryOutput)),
+	  mediaHub_(std::move(mediaHub))
+{
+}
+
 HoldPipeline::~HoldPipeline()
 {
 	stop();
@@ -83,6 +91,7 @@ void HoldPipeline::register_output_type()
 {
 	static std::once_flag once;
 	std::call_once(once, [] {
+		HoldMediaHub::register_source_type();
 		obs_output_info info{};
 		info.id = CaptureOutputId;
 		info.flags = OBS_OUTPUT_AV | OBS_OUTPUT_ENCODED | OBS_OUTPUT_MULTI_TRACK_AUDIO;
@@ -96,84 +105,6 @@ void HoldPipeline::register_output_type()
 		info.encoded_audio_codecs = "aac;opus;pcm_s16le;pcm_s24le;pcm_s32le;flac";
 		obs_register_output(&info);
 	});
-}
-
-bool HoldPipeline::create_view(std::string &error)
-{
-	obs_video_info videoInfo{};
-	if (!obs_get_video_info(&videoInfo)) {
-		error = "OBS video is not initialized.";
-		return false;
-	}
-	view_ = obs_view_create();
-	if (!view_) {
-		error = "Could not create the private hold-scene view.";
-		return false;
-	}
-	video_ = obs_view_add2(view_, &videoInfo);
-	if (!video_) {
-		error = "Could not attach video output to the private hold-scene view.";
-		return false;
-	}
-	// AUX_VIEW only marks a source as showing.  Explicit activation is needed
-	// for children such as game/window/screen capture sources that begin
-	// producing frames from their activate callback while the scene is not in
-	// Program.
-	obs_source_inc_active(scene_);
-	sceneActive_ = true;
-	obs_view_set_source(view_, 0, scene_);
-	return true;
-}
-
-bool HoldPipeline::audio_input(void *param, const uint64_t startTs, uint64_t, uint64_t *newTs,
-			       const uint32_t activeMixers, audio_output_data *mixes)
-{
-	auto *self = static_cast<HoldPipeline *>(param);
-	if (!self || !mixes)
-		return false;
-
-	// libobs does not expose a stable, independently clocked audio render for an
-	// arbitrary private scene.  Reading obs_source_get_audio_mix from this
-	// secondary audio thread races the main mixer and can duplicate or skip
-	// blocks, so the production-safe hold path intentionally emits silence.
-	const size_t channels = self->audioChannels_;
-	for (size_t mix = 0; mix < MAX_AUDIO_MIXES; ++mix) {
-		if ((activeMixers & (1U << mix)) == 0)
-			continue;
-		for (size_t channel = 0; channel < channels; ++channel) {
-			float *destination = mixes[mix].data[channel];
-			if (!destination)
-				continue;
-			std::memset(destination, 0, AUDIO_OUTPUT_FRAMES * sizeof(float));
-		}
-	}
-	if (newTs)
-		*newTs = startTs;
-	return true;
-}
-
-bool HoldPipeline::create_audio(std::string &error)
-{
-	audio_t *mainAudio = obs_get_audio();
-	const audio_output_info *mainInfo = audio_output_get_info(mainAudio);
-	if (!mainInfo) {
-		error = "OBS audio is not initialized.";
-		return false;
-	}
-
-	std::ostringstream name;
-	name << "dynamic-delay-hold-audio-" << this;
-	audioName_ = name.str();
-	audio_output_info info = *mainInfo;
-	audioChannels_ = get_audio_channels(info.speakers);
-	info.name = audioName_.c_str();
-	info.input_callback = &HoldPipeline::audio_input;
-	info.input_param = this;
-	if (audio_output_open(&audio_, &info) != AUDIO_OUTPUT_SUCCESS) {
-		error = "Could not create the private hold-scene audio clock.";
-		return false;
-	}
-	return true;
 }
 
 obs_encoder_t *HoldPipeline::clone_video_encoder(obs_encoder_t *original, std::string &error)
@@ -193,7 +124,7 @@ obs_encoder_t *HoldPipeline::clone_video_encoder(obs_encoder_t *original, std::s
 		return nullptr;
 	}
 
-	obs_encoder_set_video(clone, video_);
+	obs_encoder_set_video(clone, mediaHub_->video());
 	if (obs_encoder_scaling_enabled(original))
 		obs_encoder_set_scaled_size(clone, obs_encoder_get_width(original), obs_encoder_get_height(original));
 	obs_encoder_set_gpu_scale_type(clone, obs_encoder_get_scale_type(original));
@@ -210,13 +141,13 @@ obs_encoder_t *HoldPipeline::clone_audio_encoder(obs_encoder_t *original, const 
 	std::ostringstream name;
 	name << "dynamic-delay-hold-audio-" << index << '-' << this;
 	obs_encoder_t *clone = obs_audio_encoder_create(obs_encoder_get_id(original), name.str().c_str(), settings,
-							obs_encoder_get_mixer_index(original), nullptr);
+							mediaHub_->encoder_mixer_index(original), nullptr);
 	obs_data_release(settings);
 	if (!clone) {
 		error = std::string("Could not clone audio encoder: ") + obs_encoder_get_id(original);
 		return nullptr;
 	}
-	obs_encoder_set_audio(clone, audio_);
+	obs_encoder_set_audio(clone, mediaHub_->audio());
 	return clone;
 }
 
@@ -260,7 +191,19 @@ bool HoldPipeline::start(std::string &error)
 {
 	if (started_)
 		return true;
-	if (!create_view(error) || !create_audio(error) || !clone_encoders(error) || !create_capture_output(error)) {
+	if (!mediaHub_) {
+		mediaHub_ = HoldMediaHub::create(scene_, {}, error);
+		if (!mediaHub_) {
+			stop();
+			return false;
+		}
+	}
+	if (!mediaHub_->active()) {
+		error = "The shared hold media hub is not active.";
+		stop();
+		return false;
+	}
+	if (!clone_encoders(error) || !create_capture_output(error)) {
 		stop();
 		return false;
 	}
@@ -288,21 +231,7 @@ void HoldPipeline::stop()
 	}
 	obs_encoder_release(videoEncoder_);
 	videoEncoder_ = nullptr;
-	if (audio_) {
-		audio_output_close(audio_);
-		audio_ = nullptr;
-	}
-	if (view_) {
-		obs_view_set_source(view_, 0, nullptr);
-		obs_view_remove(view_);
-		obs_view_destroy(view_);
-		view_ = nullptr;
-		video_ = nullptr;
-	}
-	if (sceneActive_) {
-		obs_source_dec_active(scene_);
-		sceneActive_ = false;
-	}
+	mediaHub_.reset();
 	started_ = false;
 }
 

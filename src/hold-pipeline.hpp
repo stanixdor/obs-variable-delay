@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hold-audio-tap.hpp"
 #include "obs-packet.hpp"
 
 #include <obs.h>
@@ -14,9 +15,13 @@
 namespace dynamic_delay {
 
 class OutputSession;
+class HoldMediaHub;
 
 class HoldPipeline {
 public:
+	HoldPipeline(OutputSession &owner, obs_output_t *primaryOutput, std::shared_ptr<HoldMediaHub> mediaHub);
+	// Compatibility path for a single output.  New callers should create one
+	// HoldMediaHub per activation and share it across every OutputSession.
 	HoldPipeline(OutputSession &owner, obs_output_t *primaryOutput, obs_source_t *scene);
 	~HoldPipeline();
 
@@ -32,10 +37,6 @@ public:
 	static void register_output_type();
 
 private:
-	static bool audio_input(void *param, uint64_t startTs, uint64_t endTs, uint64_t *newTs, uint32_t activeMixers,
-				audio_output_data *mixes);
-	bool create_view(std::string &error);
-	bool create_audio(std::string &error);
 	bool clone_encoders(std::string &error);
 	bool create_capture_output(std::string &error);
 	obs_encoder_t *clone_video_encoder(obs_encoder_t *original, std::string &error);
@@ -44,17 +45,12 @@ private:
 
 	OutputSession &owner_;
 	obs_output_t *primaryOutput_ = nullptr;
+	std::shared_ptr<HoldMediaHub> mediaHub_;
 	obs_source_t *scene_ = nullptr;
-	obs_view_t *view_ = nullptr;
-	video_t *video_ = nullptr;
-	audio_t *audio_ = nullptr;
 	obs_output_t *captureOutput_ = nullptr;
 	obs_encoder_t *videoEncoder_ = nullptr;
 	std::array<obs_encoder_t *, MAX_OUTPUT_AUDIO_ENCODERS> audioEncoders_{};
-	std::string audioName_;
-	std::size_t audioChannels_ = 0;
 	bool started_ = false;
-	bool sceneActive_ = false;
 };
 
 } // namespace dynamic_delay

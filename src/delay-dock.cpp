@@ -27,8 +27,12 @@ DelayDock::DelayDock(DelayController &controller, QWidget *parent) : QWidget(par
 	connect(&controller_, &DelayController::snapshot_changed, this, &DelayDock::apply_snapshot);
 	connect(&controller_, &DelayController::settings_changed, this, &DelayDock::apply_settings);
 	connect(&controller_, &DelayController::scenes_changed, this, [this] { rebuild_scenes(); });
+	connect(&controller_, &DelayController::audio_sources_changed, this, [this] { rebuild_audio_sources(); });
+	connect(&controller_, &DelayController::audio_preflight_changed, audioWarning_, &QLabel::setText);
 	rebuild_scenes();
+	rebuild_audio_sources();
 	apply_settings(controller_.settings());
+	audioWarning_->setText(controller_.audio_preflight());
 	apply_snapshot(controller_.snapshot());
 }
 
@@ -105,6 +109,60 @@ void DelayDock::build_ui()
 	connect(transitionCombo_, &QComboBox::currentIndexChanged, this, [this](int index) {
 		if (!applying_ && index >= 0)
 			controller_.set_transition_style(transitionCombo_->itemData(index).toInt());
+	});
+
+	auto *audioLabel = new QLabel(tr("Hold audio"), this);
+	audioLabel->setFont(sectionFont);
+	root->addWidget(audioLabel);
+
+	auto *audioForm = new QFormLayout;
+	audioForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+	audioModeCombo_ = new QComboBox(this);
+	audioModeCombo_->addItem(tr("Scene mix (recommended)"), static_cast<int>(HoldAudioMode::SceneMix));
+	audioModeCombo_->addItem(tr("Dedicated source"), static_cast<int>(HoldAudioMode::DedicatedSource));
+	audioModeCombo_->addItem(tr("Reserved OBS track (advanced)"), static_cast<int>(HoldAudioMode::ReservedTrack));
+	audioModeCombo_->addItem(tr("Silence"), static_cast<int>(HoldAudioMode::Silence));
+	audioModeCombo_->setToolTip(
+		tr("Scene mix captures an isolated hold scene privately. A dedicated source must be exclusive to hold "
+		   "audio; shared active sources fall back to silence. Reserved track reads an otherwise unused OBS "
+		   "audio track."));
+	audioSourceCombo_ = new QComboBox(this);
+	audioSourceCombo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+	audioSourceCombo_->setToolTip(
+		tr("The source must not be active in Program or referenced by another scene. Its OBS track routing is "
+		   "preserved, so assign it to every output track that should contain hold audio."));
+	reservedTrackCombo_ = new QComboBox(this);
+	for (int track = 1; track <= MAX_AUDIO_MIXES; ++track)
+		reservedTrackCombo_->addItem(tr("Track %1").arg(track), track);
+	reservedTrackCombo_->setToolTip(
+		tr("In Advanced Audio Properties, assign the desired hold-scene sources to this track, remove every "
+		   "other source from it, and do not encode this track in Streaming or Recording."));
+	audioSourceLabel_ = new QLabel(tr("Dedicated / fallback source"), this);
+	reservedTrackLabel_ = new QLabel(tr("Reserved track"), this);
+	audioForm->addRow(tr("Mode"), audioModeCombo_);
+	audioForm->addRow(audioSourceLabel_, audioSourceCombo_);
+	audioForm->addRow(reservedTrackLabel_, reservedTrackCombo_);
+	root->addLayout(audioForm);
+
+	audioWarning_ = new QLabel(this);
+	audioWarning_->setWordWrap(true);
+	audioWarning_->setAccessibleName(tr("Hold audio preflight"));
+	audioWarning_->setStyleSheet(
+		QStringLiteral("QLabel { color: palette(mid); border-left: 3px solid #f3b33d; padding: 4px 6px; }"));
+	root->addWidget(audioWarning_);
+
+	connect(audioModeCombo_, &QComboBox::currentIndexChanged, this, [this](int index) {
+		if (!applying_ && index >= 0)
+			controller_.set_hold_audio_mode(audioModeCombo_->itemData(index).toInt());
+		update_audio_controls();
+	});
+	connect(audioSourceCombo_, &QComboBox::currentIndexChanged, this, [this](int index) {
+		if (!applying_ && index >= 0)
+			controller_.set_hold_audio_source(audioSourceCombo_->itemData(index).toString());
+	});
+	connect(reservedTrackCombo_, &QComboBox::currentIndexChanged, this, [this](int index) {
+		if (!applying_ && index >= 0)
+			controller_.set_reserved_audio_track(reservedTrackCombo_->itemData(index).toInt());
 	});
 
 	auto *memoryFrame = new QFrame(this);
@@ -198,10 +256,12 @@ void DelayDock::apply_snapshot(const DelaySnapshot &snapshot)
 	delaySlider_->setEnabled(snapshot.state == DelayState::Bypass || snapshot.state == DelayState::Delayed ||
 				 snapshot.state == DelayState::Error);
 	delaySpin_->setEnabled(delaySlider_->isEnabled());
-	const bool configurationEnabled = snapshot.state == DelayState::Bypass ||
-					  snapshot.state == DelayState::Delayed || snapshot.state == DelayState::Error;
-	sceneCombo_->setEnabled(configurationEnabled);
-	transitionCombo_->setEnabled(configurationEnabled);
+	configurationEnabled_ = snapshot.state == DelayState::Bypass || snapshot.state == DelayState::Delayed ||
+				snapshot.state == DelayState::Error;
+	sceneCombo_->setEnabled(configurationEnabled_);
+	transitionCombo_->setEnabled(configurationEnabled_);
+	audioModeCombo_->setEnabled(configurationEnabled_);
+	update_audio_controls();
 }
 
 void DelayDock::apply_settings(const DelaySettings &settings)
@@ -215,8 +275,57 @@ void DelayDock::apply_settings(const DelaySettings &settings)
 	const int sceneIndex = sceneCombo_->findData(QString::fromStdString(settings.holdSceneUuid));
 	if (sceneIndex >= 0)
 		sceneCombo_->setCurrentIndex(sceneIndex);
+	const int audioModeIndex = audioModeCombo_->findData(static_cast<int>(settings.holdAudioMode));
+	if (audioModeIndex >= 0)
+		audioModeCombo_->setCurrentIndex(audioModeIndex);
+	const int audioSourceIndex = audioSourceCombo_->findData(QString::fromStdString(settings.holdAudioSourceUuid));
+	if (audioSourceIndex >= 0)
+		audioSourceCombo_->setCurrentIndex(audioSourceIndex);
+	else if (settings.holdAudioSourceUuid.empty())
+		audioSourceCombo_->setCurrentIndex(0);
+	else {
+		const QString missingUuid = QString::fromStdString(settings.holdAudioSourceUuid);
+		audioSourceCombo_->addItem(tr("Missing source (%1)").arg(missingUuid), missingUuid);
+		audioSourceCombo_->setCurrentIndex(audioSourceCombo_->count() - 1);
+	}
+	const int reservedTrackIndex = reservedTrackCombo_->findData(static_cast<int>(settings.reservedAudioTrack));
+	if (reservedTrackIndex >= 0)
+		reservedTrackCombo_->setCurrentIndex(reservedTrackIndex);
 	previewToggle_->setChecked(settings.previewExpanded);
 	applying_ = false;
+	update_audio_controls();
+}
+
+void DelayDock::rebuild_audio_sources()
+{
+	const DelaySettings current = controller_.settings();
+	applying_ = true;
+	audioSourceCombo_->clear();
+	audioSourceCombo_->addItem(tr("None (silence fallback)"), QString{});
+	for (const AudioSourceChoice &source : controller_.audio_sources())
+		audioSourceCombo_->addItem(source.name, source.uuid);
+	const QString selectedUuid = QString::fromStdString(current.holdAudioSourceUuid);
+	int index = audioSourceCombo_->findData(selectedUuid);
+	if (index < 0 && !selectedUuid.isEmpty()) {
+		audioSourceCombo_->addItem(tr("Missing source (%1)").arg(selectedUuid), selectedUuid);
+		index = audioSourceCombo_->count() - 1;
+	}
+	audioSourceCombo_->setCurrentIndex(index >= 0 ? index : 0);
+	applying_ = false;
+	update_audio_controls();
+}
+
+void DelayDock::update_audio_controls()
+{
+	if (!audioModeCombo_)
+		return;
+	const auto mode = static_cast<HoldAudioMode>(audioModeCombo_->currentData().toInt());
+	const bool sourceRelevant = mode == HoldAudioMode::SceneMix || mode == HoldAudioMode::DedicatedSource;
+	const bool trackRelevant = mode == HoldAudioMode::ReservedTrack;
+	audioSourceLabel_->setEnabled(configurationEnabled_ && sourceRelevant);
+	audioSourceCombo_->setEnabled(configurationEnabled_ && sourceRelevant);
+	reservedTrackLabel_->setEnabled(configurationEnabled_ && trackRelevant);
+	reservedTrackCombo_->setEnabled(configurationEnabled_ && trackRelevant);
 }
 
 void DelayDock::rebuild_scenes()

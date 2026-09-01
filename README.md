@@ -2,7 +2,7 @@
 
 Plugin nativo para OBS Studio que permite **añadir, cancelar, cambiar o quitar delay sin detener la emisión ni la grabación**. Trabaja sobre los paquetes ya comprimidos que OBS entrega al output, por lo que el coste estable es principalmente RAM y no una segunda codificación permanente.
 
-Versión: `1.0.0`<br>
+Versión: `1.1.0`<br>
 Compatibilidad de referencia: OBS Studio `32.2.2`, Qt `6.11.1`, macOS 13+ y Windows 10/11 x64.
 
 ## Qué hace
@@ -14,18 +14,48 @@ Compatibilidad de referencia: OBS Studio `32.2.2`, Qt `6.11.1`, macOS 13+ y Wind
 - Muestra una escena elegida mientras construye el buffer inicial.
 - Calcula la RAM prevista a partir del bitrate real observado o del bitrate configurado.
 - Incluye una vista de audiencia plegable, a 320×180 y 2 fps, que se captura únicamente mientras está abierta.
-- Conserva todas las pistas de audio codificadas y hace los empalmes de vídeo únicamente en keyframes.
+- Reproduce audio durante la escena de espera mediante un mezclador privado; incluye modos de escena, fuente
+  dedicada, pista reservada y silencio explícito.
+- Conserva el layout de pistas del output y hace los empalmes de vídeo únicamente en keyframes.
 - Se rearma por separado tras una reconexión de streaming y vuelve a un estado seguro si detecta un formato no compatible o un límite de RAM.
 
 ## Flujo exacto
 
 1. El usuario elige duración y escena de espera y pulsa **Add delay**.
-2. El programa sigue en directo mientras se prepara un encoder auxiliar compatible y se espera un keyframe seguro.
-3. En ese keyframe, el output pasa a la escena de espera y el contenido normal empieza a guardarse como paquetes comprimidos.
+2. El programa sigue en directo mientras se preparan encoders auxiliares compatibles, se valida el audio y se
+   espera un keyframe seguro.
+3. En ese keyframe, el output pasa a la escena de espera con el modo de audio elegido y el contenido normal
+   empieza a guardarse como paquetes comprimidos.
 4. Al completar el tiempo configurado, el output empieza a emitir ese buffer con el delay elegido. El encoder auxiliar se apaga.
 5. Al pulsar **Remove delay / cancel**, el plugin sigue entregando una salida válida hasta el siguiente keyframe vivo y vuelve entonces al directo, sin parar streaming o grabación.
 
 Si se cancela durante la preparación o el llenado, el plugin vuelve del mismo modo a la señal viva. Cambiar segundos o escena con el delay activo ejecuta un rearme automático con la nueva configuración; el output permanece activo.
+
+## Audio de la escena de espera
+
+El modo predeterminado es **Scene mix (recommended)**. Libobs renderiza la escena de espera en una vista privada;
+el plugin copia su PCM ya mezclado a una FIFO SPSC acotada y lo entrega a un reloj de audio privado. No asigna,
+silencia ni modifica fuentes, pistas o buses globales de OBS.
+
+- **Scene mix:** conserva el routing de pistas de las fuentes de la escena. Es la opción normal.
+- **Dedicated source:** usa una única fuente de audio exclusiva para la espera. Conserva la asignación de pistas
+  de esa fuente.
+- **Reserved OBS track (advanced):** toma el mix de una pista OBS 1-6 reservada y lo replica en las pistas de
+  audio del output de espera. Esa pista no puede estar siendo codificada por ningún output activo.
+- **Silence:** silencio intencional, útil como política explícita o para diagnosticar configuraciones.
+
+Antes de cada activación se hace un *preflight* conservador que recorre escenas, grupos, elementos ocultos,
+canvases, fuentes y outputs activos. Si `Scene mix` comparte una fuente de audio con otra escena o con Program,
+se usa la fuente dedicada configurada cuando es exclusiva; si tampoco es segura, sólo el audio de espera cae a
+silencio. El vídeo y el delay siguen funcionando. Si la topología cambia durante el llenado, la degradación a
+silencio queda fijada hasta la siguiente activación para evitar duplicar audio en Program.
+
+Para configurar **Reserved OBS track**:
+
+1. En **Propiedades de audio avanzadas**, asigna a la pista elegida únicamente las fuentes de la escena de espera.
+2. Quita esa pista de todas las demás fuentes.
+3. No selecciones esa pista para streaming, grabación, Replay Buffer, Virtual Camera ni otro output/plugin activo.
+4. Selecciona la misma pista en el panel. El diagnóstico debe confirmar que es exclusiva antes de activar el delay.
 
 ## Instalación
 
@@ -72,10 +102,18 @@ Durante **Preparing/Filling** se crea un segundo encoder de vídeo con la misma 
 - evita ejecutar streaming y grabación con configuraciones distintas si no necesitas ambos outputs;
 - configura un intervalo de keyframes razonable (por ejemplo, 2 segundos), ya que todas las entradas y salidas esperan un keyframe seguro.
 
-## Limitaciones deliberadas de la versión 1.0
+Streaming y grabación simultáneos comparten una sola vista, reloj y FIFO de la escena de espera. El puente PCM es
+fijo y acotado: 16 bloques × 1024 frames × 6 mixes × 8 canales, aproximadamente 3 MiB por activación, sin
+reservar audio proporcional a los segundos de delay. Su lookahead interno es de un quantum de OBS, unos 21,3 ms
+a 48 kHz.
+
+## Limitaciones deliberadas de la versión 1.1
 
 - **Transición:** el modo de producción es `Cut on keyframe`. La opción de fade aparece deshabilitada porque un crossfade real entre vídeo ya retrasado y vídeo vivo exige decodificar, componer y volver a codificar toda la señal. Eso contradice el objetivo de bajo consumo y puede degradar imagen y latencia.
-- **Audio de la escena de espera:** durante el llenado se emite silencio codificado en todas las pistas. El vídeo de la escena sí se reproduce. La API pública de libobs no ofrece un mixer privado, independiente y estable para renderizar el audio arbitrario de una segunda escena; reutilizar el mix global puede duplicar o saltar bloques.
+- **Empalme de audio:** el cambio entre el encoder principal y el auxiliar puede introducir un hueco muy breve de
+  una o dos tramas AAC. No existe ya el silencio de varios segundos durante el llenado.
+- **Seguridad de audio:** una fuente compartida o una pista reservada que deje de ser exclusiva provoca silencio
+  sólo en la escena de espera. El plugin no altera el routing global para intentar corregirlo automáticamente.
 - **Quitar delay:** la vuelta es inmediata en términos de control, pero el empalme efectivo espera el siguiente keyframe para mantener el stream decodificable. El máximo habitual es el intervalo GOP configurado.
 - **Vista de audiencia:** representa aproximadamente los frames enviados por OBS. No incluye el buffer del servidor, CDN ni reproductor del espectador. Durante la escena de espera muestra su estado en lugar de mantener otra renderización auxiliar.
 - Se admiten outputs codificados con audio y vídeo. No se admiten outputs raw, solo-audio, solo-vídeo, el delay nativo de OBS ni `Multi-track Video / Enhanced Broadcasting`.
@@ -84,6 +122,13 @@ Durante **Preparing/Filling** se crea un segundo encoder de vídeo con la misma 
 ## Arquitectura
 
 El callback síncrono de paquetes de cada output actúa como un portador de ritmo. El plugin conserva sus timestamps de pared, pista, encoder y timebase y sustituye únicamente el payload por el paquete correspondiente del buffer. Cada cambio de procedencia crea una nueva época temporal y aplica un puente común A/V cuando hace falta, evitando PTS no monótonos con encoders que usan B-frames.
+
+El audio auxiliar no usa el bus de Program. Una fuente privada `COMPOSITE` participa en el árbol de render de
+audio de la vista auxiliar sin registrarse como fuente global de audio. El productor de libobs escribe bloques PCM
+fijos en una FIFO SPSC; el consumidor, que corre en el reloj privado, aplica una sola corrección de fase/sync y
+después avanza por frames para evitar drift. Si el backend deja de ser seguro, un kill-switch atómico vacía la
+enumeración de audio sin desmontar la vista de vídeo. Los observadores usan conexiones RAII al `signal_handler`,
+por lo que no mantienen vivas escenas o fuentes creadas por otros plugins.
 
 El estado por output es:
 
@@ -142,11 +187,17 @@ Los workflows incluidos construyen y prueban macOS universal y Windows x64 en Gi
 
 ## Validación realizada
 
-- 26 casos del núcleo: delay exacto, cancelación, múltiples pistas, keyframes, generaciones/rearmado, límites de memoria, timebases no unitarias y continuidad A/V.
+- 26 casos del núcleo de paquetes: delay exacto, cancelación, múltiples pistas, keyframes,
+  generaciones/rearmado, límites de memoria, timebases no unitarias y continuidad A/V.
+- 9 escenarios del puente de audio: FIFO acotada/concurrente, offsets positivos/negativos, discontinuidades,
+  fase 48 kHz, underrun y ausencia de drift.
 - Build estricto con warnings como errores.
-- ASan + UBSan, y TSan sobre el núcleo.
-- Prueba real en OBS 32.2.2 macOS arm64: preparar, llenar, cambiar de escenas, preview plegable, cancelar tanto en preparación como en llenado, activar delay y volver a live sin detener la grabación.
-- Análisis con FFmpeg del archivo resultante: 0 regresiones DTS, 0 regresiones de PTS decodificado y decodificación completa sin errores.
+- ASan + UBSan y TSan sobre ambos núcleos, sin hallazgos.
+- Prueba real en OBS 32.2.2 macOS arm64: iniciar una grabación, cancelar durante `Preparing/Filling`, activar un
+  delay completo, cambiar Program de escena, abrir/cerrar el preview y volver a live sin detener el output.
+- Grabación de validación de 174,002 s: H.264 1920×1080 + AAC 48 kHz estéreo, decodificación completa sin
+  errores y 0 regresiones DTS en 10.425 paquetes de vídeo y 8.154 de audio.
+- Audio no silencioso medido durante ambas escenas de espera: −21,5 dB y −21,9 dB de volumen medio.
 - DLL Windows x64: formato PE32+ validado, ocho exports OBS presentes e imports resueltos contra la distribución oficial.
 
 ## Licencia
