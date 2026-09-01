@@ -73,6 +73,13 @@ function Package {
         Copy-Item -LiteralPath $InstallItems.FullName -Destination $ArchiveStagingRoot -Recurse
         Get-ChildItem -LiteralPath $ArchiveStagingRoot -Filter '*.pdb' -File -Recurse -Force | Remove-Item -Force
 
+        $PackageRoot = Join-Path -Path $ArchiveStagingRoot -ChildPath $ProductName
+        if ( ! ( Test-Path -LiteralPath $PackageRoot -PathType Container ) ) {
+            throw "Installed plugin root not found: ${PackageRoot}"
+        }
+        Copy-Item -LiteralPath "${ProjectRoot}/README.md" -Destination $PackageRoot
+        Copy-Item -LiteralPath "${ProjectRoot}/LICENSE" -Destination $PackageRoot
+
         $CompressArgs = @{
             Path = (Get-ChildItem -LiteralPath $ArchiveStagingRoot).FullName
             CompressionLevel = 'Optimal'

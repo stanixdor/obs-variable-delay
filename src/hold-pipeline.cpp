@@ -43,11 +43,27 @@ bool capture_start(void *data)
 	auto *sink = static_cast<CaptureSink *>(data);
 	if (!sink || !sink->output)
 		return false;
-	if (!obs_output_can_begin_data_capture(sink->output, 0))
+	if (!obs_output_can_begin_data_capture(sink->output, 0)) {
+		obs_output_set_last_error(sink->output, "The internal hold output cannot begin data capture.");
+		obs_log(LOG_ERROR, "Internal hold output cannot begin data capture");
 		return false;
-	if (!obs_output_initialize_encoders(sink->output, 0))
+	}
+	if (!obs_output_initialize_encoders(sink->output, 0)) {
+		const char *lastError = obs_output_get_last_error(sink->output);
+		if (!lastError || !*lastError) {
+			obs_output_set_last_error(sink->output, "The internal hold encoders could not be initialized.");
+			lastError = obs_output_get_last_error(sink->output);
+		}
+		obs_log(LOG_ERROR, "Internal hold encoder initialization failed: %s",
+			lastError && *lastError ? lastError : "unknown encoder error");
 		return false;
-	return obs_output_begin_data_capture(sink->output, 0);
+	}
+	if (!obs_output_begin_data_capture(sink->output, 0)) {
+		obs_output_set_last_error(sink->output, "The internal hold output could not start data capture.");
+		obs_log(LOG_ERROR, "Internal hold output could not start data capture");
+		return false;
+	}
+	return true;
 }
 
 void capture_stop(void *data, uint64_t)

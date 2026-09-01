@@ -21,6 +21,22 @@ constexpr std::size_t MaxPrimaryBufferBytes = 4ULL * 1024ULL * 1024ULL * 1024ULL
 constexpr std::size_t MaxHoldBufferBytes = 128ULL * 1024ULL * 1024ULL;
 constexpr std::size_t MaxHoldLanePackets = 4096;
 
+std::size_t video_encoder_count(const obs_output_t *output) noexcept
+{
+	std::size_t count = 0;
+	for (std::size_t index = 0; index < MAX_OUTPUT_VIDEO_ENCODERS; ++index)
+		count += obs_output_get_video_encoder2(output, index) != nullptr ? 1U : 0U;
+	return count;
+}
+
+std::size_t audio_encoder_count(const obs_output_t *output) noexcept
+{
+	std::size_t count = 0;
+	for (std::size_t index = 0; index < MAX_OUTPUT_AUDIO_ENCODERS; ++index)
+		count += obs_output_get_audio_encoder(output, index) != nullptr ? 1U : 0U;
+	return count;
+}
+
 int64_t ticks_to_usec(const int64_t ticks, const int32_t numerator, const int32_t denominator) noexcept
 {
 	(void)numerator;
@@ -88,12 +104,17 @@ bool OutputSession::supported(std::string &error) const
 		error = "The output must be an encoded audio/video output.";
 		return false;
 	}
-	if ((flags & OBS_OUTPUT_MULTI_TRACK_VIDEO) != 0) {
-		error = "Multi-track video (including Enhanced Broadcasting) is not supported safely.";
+	const std::size_t videoEncoders = video_encoder_count(output_);
+	if (videoEncoders == 0) {
+		error = "The output has no video encoder.";
 		return false;
 	}
-	if (!obs_output_get_video_encoder(output_)) {
-		error = "The output has no video encoder.";
+	// Hybrid MP4/MOV advertises OBS_OUTPUT_MULTI_TRACK_VIDEO as a capability
+	// even for an ordinary single-video recording.  Reject the active layout,
+	// not the output type's capability flag, so those default OBS 32 formats
+	// remain usable while real multi-video/Enhanced Broadcasting stays blocked.
+	if (videoEncoders != 1 || !obs_output_get_video_encoder2(output_, 0)) {
+		error = "Multiple video tracks (including Enhanced Broadcasting) are not supported safely.";
 		return false;
 	}
 	bool hasAudio = false;
@@ -112,6 +133,15 @@ bool OutputSession::supported(std::string &error) const
 
 bool OutputSession::attach(std::string &error)
 {
+	const uint32_t flags = obs_output_get_flags(output_);
+	const char *outputId = obs_output_get_id(output_);
+	obs_encoder_t *videoEncoder = obs_output_get_video_encoder(output_);
+	const char *videoEncoderId = videoEncoder ? obs_encoder_get_id(videoEncoder) : nullptr;
+	obs_log(LOG_INFO,
+		"%s: inspecting output id=%s flags=0x%08x video_encoders=%zu audio_encoders=%zu "
+		"video_encoder=%s",
+		label_.c_str(), outputId ? outputId : "<unknown>", flags, video_encoder_count(output_),
+		audio_encoder_count(output_), videoEncoderId ? videoEncoderId : "<none>");
 	if (!supported(error))
 		return false;
 	if (!callbackAttached_) {

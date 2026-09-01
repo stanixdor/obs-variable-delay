@@ -2,8 +2,12 @@
 
 Plugin nativo para OBS Studio que permite **añadir, cancelar, cambiar o quitar delay sin detener la emisión ni la grabación**. Trabaja sobre los paquetes ya comprimidos que OBS entrega al output, por lo que el coste estable es principalmente RAM y no una segunda codificación permanente.
 
-Versión: `1.1.0`<br>
+Versión: `1.1.1`<br>
 Compatibilidad de referencia: OBS Studio `32.2.x`, Qt 6, macOS 13+, Windows 10/11 x64 y Ubuntu 24.04 x86_64.
+
+La versión 1.1.1 corrige en **macOS, Windows y Linux** la detección de Hybrid MP4/MOV y RTMP de una sola pista
+en OBS 32: estos outputs anuncian capacidad multivídeo aunque no la estén usando. También corrige la ruta de
+instalación global en Windows y amplía el diagnóstico del encoder auxiliar en las tres plataformas.
 
 ## Qué hace
 
@@ -75,19 +79,37 @@ El artefacto local está firmado *ad hoc*. No está notarizado con una cuenta Ap
 ### Windows x64
 
 1. Cierra OBS.
-2. Extrae la carpeta `obs-dynamic-delay` del ZIP dentro de:
+2. Abre esta ruta en la barra de direcciones del Explorador de archivos (la carpeta `ProgramData` está oculta
+   normalmente). Si `obs-studio\plugins` no existe, créala; Windows puede pedir permisos de administrador:
 
    ```text
-   %APPDATA%\obs-studio\plugins\
+   %PROGRAMDATA%\obs-studio\plugins\
    ```
 
-3. Comprueba que exista esta ruta:
+3. Extrae ahí **la carpeta completa `obs-dynamic-delay`** del ZIP. No copies `bin` y `data` sueltas en la
+   carpeta de instalación de OBS y no uses `%APPDATA%`.
+4. Comprueba que el DLL termine exactamente en:
 
    ```text
-   %APPDATA%\obs-studio\plugins\obs-dynamic-delay\bin\64bit\obs-dynamic-delay.dll
+   %PROGRAMDATA%\obs-studio\plugins\obs-dynamic-delay\bin\64bit\obs-dynamic-delay.dll
    ```
 
-4. Abre OBS y activa **Docks → Dynamic Delay**.
+   También puedes comprobarlo desde PowerShell:
+
+   ```powershell
+   Test-Path "$env:ProgramData\obs-studio\plugins\obs-dynamic-delay\bin\64bit\obs-dynamic-delay.dll"
+   ```
+
+   El resultado debe ser `True`.
+5. Abre OBS y activa **Paneles/Docks → Dynamic Delay**.
+
+Estas rutas corresponden a una instalación normal, no portable, de OBS. Si el panel no aparece, abre
+**Ayuda → Archivos de registro → Ver registro actual** y comprueba que `obs-dynamic-delay.dll` figure entre los
+módulos cargados.
+
+Si el panel muestra **ERROR / LIVE FALLBACK**, lee primero el texto pequeño situado debajo del estado: contiene
+la causa exacta. El mismo motivo aparece en el registro con el prefijo `[obs-dynamic-delay]`. Al solicitar ayuda,
+adjunta el registro generado después de reproducir el fallo; los registros están en `%APPDATA%\obs-studio\logs\`.
 
 El DLL incluido no lleva firma Authenticode. La firma para distribución pública requiere un certificado de firma de código del editor.
 
@@ -99,13 +121,13 @@ si esa versión no está en los repositorios configurados, puede obtenerse desde
 ```bash
 sudo add-apt-repository ppa:obsproject/obs-studio
 sudo apt update
-sudo apt install ./obs-dynamic-delay-1.1.0-x86_64-linux-gnu.deb
+sudo apt install ./obs-dynamic-delay-1.1.1-x86_64-linux-gnu.deb
 ```
 
 Como archivo alternativo, el `tar.xz` contiene el layout estándar `lib/share` para `/usr`:
 
 ```bash
-sudo tar -xJf obs-dynamic-delay-1.1.0-x86_64-ubuntu-gnu.tar.xz -C /usr
+sudo tar -xJf obs-dynamic-delay-1.1.1-x86_64-ubuntu-gnu.tar.xz -C /usr
 ```
 
 Reinicia OBS y activa **Docks → Dynamic Delay**. Estos dos artefactos están construidos para OBS nativo en
@@ -136,7 +158,9 @@ a 48 kHz.
   sólo en la escena de espera. El plugin no altera el routing global para intentar corregirlo automáticamente.
 - **Quitar delay:** la vuelta es inmediata en términos de control, pero el empalme efectivo espera el siguiente keyframe para mantener el stream decodificable. El máximo habitual es el intervalo GOP configurado.
 - **Vista de audiencia:** representa aproximadamente los frames enviados por OBS. No incluye el buffer del servidor, CDN ni reproductor del espectador. Durante la escena de espera muestra su estado en lugar de mantener otra renderización auxiliar.
-- Se admiten outputs codificados con audio y vídeo. No se admiten outputs raw, solo-audio, solo-vídeo, el delay nativo de OBS ni `Multi-track Video / Enhanced Broadcasting`.
+- Se admiten outputs codificados con audio y vídeo. Hybrid MP4/MOV y RTMP normales son compatibles cuando
+  tienen exactamente una pista de vídeo activa. No se admiten outputs raw, solo-audio, solo-vídeo, el delay
+  nativo de OBS ni layouts con varias pistas de vídeo como `Enhanced Broadcasting`.
 - El binario Windows se compila y valida estructuralmente contra la distribución oficial de OBS 32.2.2; la prueba funcional completa de esta entrega se ha realizado en macOS arm64.
 
 ## Arquitectura
@@ -228,8 +252,9 @@ como `-beta2` o `-rc1`.
 - Build estricto con warnings como errores.
 - Build nativo Linux x86_64 en Ubuntu 24.04 contra OBS Studio 32.2.0 y Qt 6.4.2; las dos suites pasan y
   `ldd -r` no encuentra símbolos sin resolver.
-- Prueba de carga real del paquete Debian en OBS 32.2.0 bajo Xvfb/llvmpipe: el módulo carga y descarga
-  limpiamente, sin crash y con 0 fugas reportadas por OBS.
+- Prueba de carga real del paquete Debian en OBS 32.2.0 bajo Docker/Xvfb/llvmpipe: el módulo 1.1.1 carga y
+  OBS completa el arranque. El cierre forzado por `SIGINT` del harness termina en segfault tanto con el plugin
+  como en el baseline sin él, por lo que ese entorno no se usa para certificar una descarga limpia.
 - ASan + UBSan y TSan sobre ambos núcleos, sin hallazgos.
 - Prueba real en OBS 32.2.2 macOS arm64: iniciar una grabación, cancelar durante `Preparing/Filling`, activar un
   delay completo, cambiar Program de escena, abrir/cerrar el preview y volver a live sin detener el output.
