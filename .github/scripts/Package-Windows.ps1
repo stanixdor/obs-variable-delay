@@ -59,13 +59,30 @@ function Package {
     Remove-Item @RemoveArgs
 
     Log-Group "Archiving ${ProductName}..."
-    $CompressArgs = @{
-        Path = (Get-ChildItem -Path "${ProjectRoot}/release/${Configuration}" -Exclude "${OutputName}*.*")
-        CompressionLevel = 'Optimal'
-        DestinationPath = "${ProjectRoot}/release/${OutputName}.zip"
-        Verbose = ($Env:CI -ne $null)
+    $InstallItems = @(
+        Get-ChildItem -Path "${ProjectRoot}/release/${Configuration}" -Exclude "${OutputName}*.*"
+    )
+    if ( $InstallItems.Count -eq 0 ) {
+        throw "No installed plugin files found for ${Configuration}."
     }
-    Compress-Archive -Force @CompressArgs
+
+    $ArchiveStagingRoot = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath "obs-plugin-package-$([guid]::NewGuid().ToString('N'))"
+    New-Item -ItemType 'Directory' -Path $ArchiveStagingRoot | Out-Null
+
+    try {
+        Copy-Item -LiteralPath $InstallItems.FullName -Destination $ArchiveStagingRoot -Recurse
+        Get-ChildItem -LiteralPath $ArchiveStagingRoot -Filter '*.pdb' -File -Recurse -Force | Remove-Item -Force
+
+        $CompressArgs = @{
+            Path = (Get-ChildItem -LiteralPath $ArchiveStagingRoot).FullName
+            CompressionLevel = 'Optimal'
+            DestinationPath = "${ProjectRoot}/release/${OutputName}.zip"
+            Verbose = ($Env:CI -ne $null)
+        }
+        Compress-Archive -Force @CompressArgs
+    } finally {
+        Remove-Item -LiteralPath $ArchiveStagingRoot -Recurse -Force -ErrorAction 'SilentlyContinue'
+    }
     Log-Group
 }
 

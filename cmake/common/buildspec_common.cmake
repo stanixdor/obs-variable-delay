@@ -223,5 +223,7 @@ function(_check_dependencies)
 
   set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} CACHE PATH "CMake prefix search path" FORCE)
 
-  _setup_obs_studio()
+  if(NOT OBS_LOCAL_APP_SDK)
+    _setup_obs_studio()
+  endif()
 endfunction()

@@ -57,10 +57,7 @@ struct TimeBase {
 	std::int64_t numerator{1};
 	std::int64_t denominator{1'000};
 
-	[[nodiscard]] constexpr bool valid() const noexcept
-	{
-		return numerator > 0 && denominator > 0;
-	}
+	[[nodiscard]] constexpr bool valid() const noexcept { return numerator > 0 && denominator > 0; }
 
 	friend constexpr bool operator==(const TimeBase &, const TimeBase &) = default;
 };
@@ -76,11 +73,9 @@ public:
 	SharedPayload &operator=(SharedPayload &&other) noexcept;
 
 	[[nodiscard]] static SharedPayload copy(std::span<const std::byte> bytes);
-	[[nodiscard]] static SharedPayload from_vector(
-		std::shared_ptr<const std::vector<std::byte>> bytes);
-	[[nodiscard]] static SharedPayload alias(std::shared_ptr<const void> owner,
-		const std::byte *data, std::size_t size,
-		std::size_t retained_size = 0);
+	[[nodiscard]] static SharedPayload from_vector(std::shared_ptr<const std::vector<std::byte>> bytes);
+	[[nodiscard]] static SharedPayload alias(std::shared_ptr<const void> owner, const std::byte *data,
+						 std::size_t size, std::size_t retained_size = 0);
 
 	[[nodiscard]] const std::byte *data() const noexcept { return data_; }
 	[[nodiscard]] std::size_t size() const noexcept { return size_; }
@@ -89,8 +84,8 @@ public:
 	[[nodiscard]] const std::shared_ptr<const void> &owner() const noexcept { return owner_; }
 
 private:
-	SharedPayload(std::shared_ptr<const void> owner, const std::byte *data,
-		std::size_t size, std::size_t retained_size) noexcept;
+	SharedPayload(std::shared_ptr<const void> owner, const std::byte *data, std::size_t size,
+		      std::size_t retained_size) noexcept;
 
 	std::shared_ptr<const void> owner_{};
 	const std::byte *data_{nullptr};
@@ -186,8 +181,7 @@ struct DelayMetrics {
 
 // Payload-only estimate (allocator/container overhead is represented separately
 // by DelayConfig::metadata_bytes_per_packet). Saturates instead of overflowing.
-[[nodiscard]] std::size_t estimate_payload_bytes(std::uint64_t total_bits_per_second,
-	Duration delay) noexcept;
+[[nodiscard]] std::size_t estimate_payload_bytes(std::uint64_t total_bits_per_second, Duration delay) noexcept;
 
 class PacketDelay final {
 public:
@@ -269,8 +263,7 @@ private:
 	using SeenMap = std::unordered_map<StreamKey, TimePoint, StreamKeyHash>;
 	using SequenceMap = std::unordered_map<StreamKey, std::uint64_t, StreamKeyHash>;
 	using TimestampMap = std::unordered_map<StreamKey, std::int64_t, StreamKeyHash>;
-	using HorizonMap =
-		std::unordered_map<StreamKey, TimestampHorizon, StreamKeyHash>;
+	using HorizonMap = std::unordered_map<StreamKey, TimestampHorizon, StreamKeyHash>;
 
 	[[nodiscard]] bool observe_time_locked(TimePoint now);
 	void enter_error_locked(std::string message);
@@ -280,18 +273,14 @@ private:
 	[[nodiscard]] bool valid_delay_locked(Duration delay) const noexcept;
 	[[nodiscard]] Duration reported_target_locked() const noexcept;
 
-	[[nodiscard]] bool enqueue_locked(Packet &packet, TimePoint now,
-		std::uint64_t sequence);
+	[[nodiscard]] bool enqueue_locked(Packet &packet, TimePoint now, std::uint64_t sequence);
 	[[nodiscard]] bool prepare_stream_locked(const StreamKey &stream);
-	[[nodiscard]] bool create_timestamp_offset_locked(const Packet &packet,
-		Duration base_delay);
-	[[nodiscard]] bool unify_timestamp_offsets_locked(
-		const std::vector<const Packet *> &epoch_fronts);
+	[[nodiscard]] bool create_timestamp_offset_locked(const Packet &packet, Duration base_delay);
+	[[nodiscard]] bool unify_timestamp_offsets_locked(const std::vector<const Packet *> &epoch_fronts);
 	[[nodiscard]] bool begin_timestamp_epoch_locked();
 	[[nodiscard]] bool retimestamp_live_locked(Packet &packet);
 	[[nodiscard]] bool note_output_timestamp_locked(const PacketMetadata &metadata);
-	[[nodiscard]] std::optional<TimestampHorizon> ordering_dts_locked(
-		const Packet &packet) const noexcept;
+	[[nodiscard]] std::optional<TimestampHorizon> ordering_dts_locked(const Packet &packet) const noexcept;
 	[[nodiscard]] std::vector<OutputPacket> drain_ready_locked(TimePoint now);
 	[[nodiscard]] std::vector<OutputPacket> drain_return_pending_locked(TimePoint now);
 	void prune_locked(TimePoint now);
@@ -305,8 +294,7 @@ private:
 	[[nodiscard]] bool build_return_pending_locked();
 
 	[[nodiscard]] double fill_progress_locked(TimePoint now) const;
-	[[nodiscard]] bool stream_is_stalled_locked(const StreamKey &stream,
-		TimePoint now) const noexcept;
+	[[nodiscard]] bool stream_is_stalled_locked(const StreamKey &stream, TimePoint now) const noexcept;
 
 	DelayConfig config_{};
 	mutable std::mutex mutex_{};

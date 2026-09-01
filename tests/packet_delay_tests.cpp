@@ -45,9 +45,8 @@ SharedPayload payload_of(std::size_t size, std::byte value = std::byte{0x2a})
 	return SharedPayload::copy(bytes);
 }
 
-Packet packet(StreamKey stream, std::int64_t pts, std::int64_t dts,
-	std::size_t payload_size = 1, TimeBase time_base = {1, 1'000},
-	bool keyframe = true)
+Packet packet(StreamKey stream, std::int64_t pts, std::int64_t dts, std::size_t payload_size = 1,
+	      TimeBase time_base = {1, 1'000}, bool keyframe = true)
 {
 	return {{stream, pts, dts, 1, time_base, keyframe, 0}, payload_of(payload_size)};
 }
@@ -67,8 +66,7 @@ void commit_activation(PacketDelay &delay, TimePoint now)
 	CHECK_EQ(delay.state(), DelayState::Delayed);
 }
 
-template<typename Exception, typename Function>
-void check_throws(Function &&function)
+template<typename Exception, typename Function> void check_throws(Function &&function)
 {
 	bool threw = false;
 	try {
@@ -104,12 +102,9 @@ void shared_payload_tracks_real_retained_memory()
 	moved = {};
 	CHECK(weak.expired());
 
-	check_throws<std::invalid_argument>([] {
-		(void)SharedPayload::from_vector(nullptr);
-	});
-	check_throws<std::invalid_argument>([] {
-		(void)SharedPayload::alias({}, reinterpret_cast<const std::byte *>(1), 1);
-	});
+	check_throws<std::invalid_argument>([] { (void)SharedPayload::from_vector(nullptr); });
+	check_throws<std::invalid_argument>(
+		[] { (void)SharedPayload::alias({}, reinterpret_cast<const std::byte *>(1), 1); });
 	check_throws<std::invalid_argument>([] {
 		auto storage = std::make_shared<std::byte>();
 		(void)SharedPayload::alias(storage, storage.get(), 2, 1);
@@ -247,16 +242,13 @@ void delayed_cut_starts_each_video_lane_on_a_keyframe()
 {
 	PacketDelay delay;
 	begin_activation(delay, 100ms);
-	CHECK(delay.push(packet({StreamKind::Video, 0, 3}, 0, 0, 2,
-		{1, 1'000}, false), 0ms).empty());
+	CHECK(delay.push(packet({StreamKind::Video, 0, 3}, 0, 0, 2, {1, 1'000}, false), 0ms).empty());
 	CHECK(delay.push(packet({StreamKind::Audio, 0, 3}, 0, 0), 0ms).empty());
 	CHECK(!delay.ready_for_delayed(100ms));
-	CHECK(delay.push(packet({StreamKind::Video, 0, 3}, 20, 20, 3,
-		{1, 1'000}, true), 20ms).empty());
+	CHECK(delay.push(packet({StreamKind::Video, 0, 3}, 20, 20, 3, {1, 1'000}, true), 20ms).empty());
 	CHECK(delay.push(packet({StreamKind::Audio, 0, 3}, 20, 20), 20ms).empty());
 	CHECK(!delay.ready_for_delayed(119ms));
-	CHECK(delay.push(packet({StreamKind::Video, 0, 3}, 120, 120, 1,
-		{1, 1'000}, false), 120ms).empty());
+	CHECK(delay.push(packet({StreamKind::Video, 0, 3}, 120, 120, 1, {1, 1'000}, false), 120ms).empty());
 	CHECK(delay.push(packet({StreamKind::Audio, 0, 3}, 120, 120), 120ms).empty());
 	CHECK(delay.ready_for_delayed(120ms));
 	commit_activation(delay, 120ms);
@@ -302,13 +294,11 @@ void timestamps_shift_once_and_preserve_pts_minus_dts()
 {
 	PacketDelay delay;
 	begin_activation(delay, 100ms);
-	auto video = packet({StreamKind::Video, 0, 5}, 9'000, 8'100, 3,
-		{1, 90'000}, true);
+	auto video = packet({StreamKind::Video, 0, 5}, 9'000, 8'100, 3, {1, 90'000}, true);
 	video.metadata.duration = 3'000;
 	video.metadata.flags = 17;
 	CHECK(delay.push(std::move(video), 0ms).empty());
-	CHECK(delay.push(packet({StreamKind::Video, 0, 5}, 18'000, 17'100, 1,
-		{1, 90'000}, true), 100ms).empty());
+	CHECK(delay.push(packet({StreamKind::Video, 0, 5}, 18'000, 17'100, 1, {1, 90'000}, true), 100ms).empty());
 	commit_activation(delay, 100ms);
 	auto output = delay.poll(100ms);
 	CHECK(!output.empty());
@@ -322,10 +312,8 @@ void timestamps_shift_once_and_preserve_pts_minus_dts()
 	// frame-step/format metadata and must not scale pts or dts.
 	PacketDelay obs_time_base;
 	begin_activation(obs_time_base, 1s);
-	CHECK(obs_time_base.push(packet({StreamKind::Video, 0, 0}, 100, 90, 1,
-		{1'001, 30'000}), 0ms).empty());
-	CHECK(obs_time_base.push(packet({StreamKind::Video, 0, 0}, 130, 120, 1,
-		{1'001, 30'000}), 1s).empty());
+	CHECK(obs_time_base.push(packet({StreamKind::Video, 0, 0}, 100, 90, 1, {1'001, 30'000}), 0ms).empty());
+	CHECK(obs_time_base.push(packet({StreamKind::Video, 0, 0}, 130, 120, 1, {1'001, 30'000}), 1s).empty());
 	commit_activation(obs_time_base, 1s);
 	auto rounded = obs_time_base.poll(1s);
 	CHECK_EQ(rounded[0].packet.metadata.pts, 30'100);
@@ -338,8 +326,7 @@ void delay_can_increase_and_decrease_while_active()
 	PacketDelay delay;
 	begin_activation(delay, 100ms);
 	for (int time : {0, 50, 100})
-		CHECK(delay.push(packet({StreamKind::Video, 0, 6}, time, time),
-			Duration{time}).empty());
+		CHECK(delay.push(packet({StreamKind::Video, 0, 6}, time, time), Duration{time}).empty());
 	commit_activation(delay, 100ms);
 	CHECK_EQ(delay.poll(100ms).size(), 1U);
 	auto at_150 = delay.push(packet({StreamKind::Video, 0, 6}, 150, 150), 150ms);
@@ -355,8 +342,7 @@ void delay_can_increase_and_decrease_while_active()
 	CHECK_EQ(old_branch[0].packet.metadata.dts, 200);
 	CHECK_EQ(delay.begin_filling(200ms), RequestResult::Accepted);
 	for (int time : {250, 300, 350})
-		CHECK(delay.push(packet({StreamKind::Video, 0, 6}, time, time),
-			Duration{time}).empty());
+		CHECK(delay.push(packet({StreamKind::Video, 0, 6}, time, time), Duration{time}).empty());
 	CHECK(!delay.ready_for_delayed(349ms));
 	commit_activation(delay, 350ms);
 	auto increased = delay.poll(350ms);
@@ -370,8 +356,7 @@ void delay_can_increase_and_decrease_while_active()
 	auto decreased = delay.poll(350ms);
 	CHECK_EQ(decreased.size(), 1U);
 	CHECK(decreased[0].packet.metadata.dts > 350);
-	CHECK_EQ(decreased[0].packet.metadata.pts -
-		decreased[0].packet.metadata.dts, 0);
+	CHECK_EQ(decreased[0].packet.metadata.pts - decreased[0].packet.metadata.dts, 0);
 	CHECK_EQ(delay.target_delay(), 50ms);
 }
 
@@ -383,12 +368,9 @@ void timestamp_epoch_absorbs_gop_overshoot_on_delay_reduction()
 	CHECK(delay.push(packet({StreamKind::Video, 0, 22}, 100, 100), 100ms).empty());
 	commit_activation(delay, 100ms);
 	CHECK_EQ(delay.poll(100ms)[0].packet.metadata.dts, 100);
-	CHECK(delay.push(packet({StreamKind::Video, 0, 22}, 140, 140, 1,
-		{1, 1'000}, true), 140ms).empty());
-	CHECK(delay.push(packet({StreamKind::Video, 0, 22}, 150, 150, 1,
-		{1, 1'000}, false), 150ms).empty());
-	auto old_epoch = delay.push(packet({StreamKind::Video, 0, 22}, 200, 200, 1,
-		{1, 1'000}, false), 200ms);
+	CHECK(delay.push(packet({StreamKind::Video, 0, 22}, 140, 140, 1, {1, 1'000}, true), 140ms).empty());
+	CHECK(delay.push(packet({StreamKind::Video, 0, 22}, 150, 150, 1, {1, 1'000}, false), 150ms).empty());
+	auto old_epoch = delay.push(packet({StreamKind::Video, 0, 22}, 200, 200, 1, {1, 1'000}, false), 200ms);
 	CHECK_EQ(old_epoch.size(), 1U);
 	CHECK_EQ(old_epoch[0].packet.metadata.dts, 200);
 
@@ -399,8 +381,7 @@ void timestamp_epoch_absorbs_gop_overshoot_on_delay_reduction()
 	CHECK(!new_epoch.empty());
 	CHECK(new_epoch[0].packet.metadata.keyframe);
 	CHECK(new_epoch[0].packet.metadata.dts > old_epoch[0].packet.metadata.dts);
-	CHECK_EQ(new_epoch[0].packet.metadata.pts -
-		new_epoch[0].packet.metadata.dts, 0);
+	CHECK_EQ(new_epoch[0].packet.metadata.pts - new_epoch[0].packet.metadata.dts, 0);
 }
 
 void b_frame_reorder_horizons_are_cleared_at_every_epoch()
@@ -411,49 +392,38 @@ void b_frame_reorder_horizons_are_cleared_at_every_epoch()
 	const StreamKey cover_audio{StreamKind::Audio, 0, 900};
 	PacketDelay activation;
 	begin_activation(activation, 100ms);
-	CHECK(activation.push(packet(video, 200, 0, 1,
-		{1, 1'000}, true), 0ms).empty());
+	CHECK(activation.push(packet(video, 200, 0, 1, {1, 1'000}, true), 0ms).empty());
 	CHECK(activation.push(packet(audio, 0, 0), 0ms).empty());
-	CHECK(activation.push(packet(video, 100, 100, 1,
-		{1, 1'000}, false), 100ms).empty());
+	CHECK(activation.push(packet(video, 100, 100, 1, {1, 1'000}, false), 100ms).empty());
 	CHECK(activation.push(packet(audio, 100, 100), 100ms).empty());
 	// The host-owned cover encoder is outside push(). Its PTS may reorder, but
 	// the maximum presentation horizon must still constrain the delayed epoch.
-	CHECK(activation.observe_external_output(
-		{cover_video, 800, 300, 1, {1, 1'000}, true, 0}));
-	CHECK(activation.observe_external_output(
-		{cover_audio, 300, 300, 1, {1, 1'000}, true, 0}));
-	CHECK(activation.observe_external_output(
-		{cover_video, 350, 400, 1, {1, 1'000}, false, 0}));
-	CHECK(activation.observe_external_output(
-		{cover_audio, 400, 400, 1, {1, 1'000}, true, 0}));
+	CHECK(activation.observe_external_output({cover_video, 800, 300, 1, {1, 1'000}, true, 0}));
+	CHECK(activation.observe_external_output({cover_audio, 300, 300, 1, {1, 1'000}, true, 0}));
+	CHECK(activation.observe_external_output({cover_video, 350, 400, 1, {1, 1'000}, false, 0}));
+	CHECK(activation.observe_external_output({cover_audio, 400, 400, 1, {1, 1'000}, true, 0}));
 	commit_activation(activation, 100ms);
 	auto delayed = activation.poll(100ms);
 	CHECK_EQ(delayed.size(), 2U);
 	const auto delayed_video = std::find_if(delayed.begin(), delayed.end(),
-		[&](const auto &item) { return item.packet.metadata.stream == video; });
+						[&](const auto &item) { return item.packet.metadata.stream == video; });
 	const auto delayed_audio = std::find_if(delayed.begin(), delayed.end(),
-		[&](const auto &item) { return item.packet.metadata.stream == audio; });
+						[&](const auto &item) { return item.packet.metadata.stream == audio; });
 	CHECK(delayed_video != delayed.end());
 	CHECK(delayed_audio != delayed.end());
 	CHECK(delayed_video->packet.metadata.dts > 400);
 	CHECK(delayed_video->packet.metadata.pts > 800);
-	CHECK_EQ(delayed_video->packet.metadata.pts -
-		delayed_video->packet.metadata.dts, 200);
-	CHECK_EQ(delayed_video->packet.metadata.dts,
-		delayed_audio->packet.metadata.dts);
+	CHECK_EQ(delayed_video->packet.metadata.pts - delayed_video->packet.metadata.dts, 200);
+	CHECK_EQ(delayed_video->packet.metadata.dts, delayed_audio->packet.metadata.dts);
 
 	PacketDelay resize;
 	begin_activation(resize, 100ms);
-	CHECK(resize.push(packet(video, 200, 0, 1,
-		{1, 1'000}, true), 0ms).empty());
-	CHECK(resize.push(packet(video, 100, 100, 1,
-		{1, 1'000}, false), 100ms).empty());
+	CHECK(resize.push(packet(video, 200, 0, 1, {1, 1'000}, true), 0ms).empty());
+	CHECK(resize.push(packet(video, 100, 100, 1, {1, 1'000}, false), 100ms).empty());
 	commit_activation(resize, 100ms);
 	auto high_pts = resize.poll(100ms);
 	CHECK_EQ(high_pts[0].packet.metadata.pts, 300);
-	auto reordered = resize.push(packet(video, 200, 200, 1,
-		{1, 1'000}, true), 200ms);
+	auto reordered = resize.push(packet(video, 200, 200, 1, {1, 1'000}, true), 200ms);
 	CHECK_EQ(reordered.size(), 1U);
 	CHECK_EQ(reordered[0].packet.metadata.pts, 200);
 	CHECK_EQ(resize.state(), DelayState::Delayed);
@@ -464,12 +434,10 @@ void b_frame_reorder_horizons_are_cleared_at_every_epoch()
 	CHECK_EQ(resized.size(), 1U);
 	CHECK(resized[0].packet.metadata.pts > high_pts[0].packet.metadata.pts);
 	CHECK(resized[0].packet.metadata.dts > reordered[0].packet.metadata.dts);
-	CHECK_EQ(resized[0].packet.metadata.pts -
-		resized[0].packet.metadata.dts, 0);
+	CHECK_EQ(resized[0].packet.metadata.pts - resized[0].packet.metadata.dts, 0);
 
 	CHECK_EQ(resize.request_deactivate(200ms), RequestResult::Accepted);
-	CHECK(resize.push(packet(video, 220, 210, 1,
-		{1, 1'000}, true), 210ms).empty());
+	CHECK(resize.push(packet(video, 220, 210, 1, {1, 1'000}, true), 210ms).empty());
 	CHECK(resize.ready_for_return());
 	CHECK_EQ(resize.commit_return(210ms), RequestResult::Accepted);
 	auto live = resize.poll(210ms);
@@ -480,21 +448,17 @@ void b_frame_reorder_horizons_are_cleared_at_every_epoch()
 
 	PacketDelay cancel;
 	begin_activation(cancel, 100ms);
-	CHECK(cancel.push(packet(video, 200, 0, 1,
-		{1, 1'000}, true), 0ms).empty());
-	CHECK(cancel.observe_external_output(
-		{cover_video, 500, 50, 1, {1, 1'000}, true, 0}));
+	CHECK(cancel.push(packet(video, 200, 0, 1, {1, 1'000}, true), 0ms).empty());
+	CHECK(cancel.observe_external_output({cover_video, 500, 50, 1, {1, 1'000}, true, 0}));
 	CHECK_EQ(cancel.request_cancel(50ms), RequestResult::Accepted);
-	CHECK(cancel.push(packet(video, 60, 60, 1,
-		{1, 1'000}, true), 60ms).empty());
+	CHECK(cancel.push(packet(video, 60, 60, 1, {1, 1'000}, true), 60ms).empty());
 	CHECK(cancel.ready_for_return());
 	CHECK_EQ(cancel.commit_return(60ms), RequestResult::Accepted);
 	auto cancelled_live = cancel.poll(60ms);
 	CHECK_EQ(cancelled_live.size(), 1U);
 	CHECK(cancelled_live[0].packet.metadata.pts > 500);
 	CHECK(cancelled_live[0].packet.metadata.dts > 50);
-	CHECK_EQ(cancelled_live[0].packet.metadata.pts -
-		cancelled_live[0].packet.metadata.dts, 0);
+	CHECK_EQ(cancelled_live[0].packet.metadata.pts - cancelled_live[0].packet.metadata.dts, 0);
 }
 
 void an_uncommitted_dynamic_change_can_be_cancelled()
@@ -526,23 +490,20 @@ void returning_waits_for_live_keyframe_and_commit()
 	PacketDelay delay;
 	begin_activation(delay, 100ms);
 	for (int time : {0, 50, 100})
-		CHECK(delay.push(packet({StreamKind::Video, 0, 8}, time, time),
-			Duration{time}).empty());
+		CHECK(delay.push(packet({StreamKind::Video, 0, 8}, time, time), Duration{time}).empty());
 	commit_activation(delay, 100ms);
 	CHECK_EQ(delay.poll(100ms).size(), 1U);
 	CHECK_EQ(delay.request_deactivate(100ms), RequestResult::Accepted);
 	CHECK_EQ(delay.state(), DelayState::Returning);
 	CHECK(!delay.ready_for_return());
 
-	auto during_return = delay.push(packet({StreamKind::Video, 0, 8}, 110, 110, 1,
-		{1, 1'000}, false), 110ms);
+	auto during_return = delay.push(packet({StreamKind::Video, 0, 8}, 110, 110, 1, {1, 1'000}, false), 110ms);
 	for (const auto &item : during_return)
 		CHECK(item.delayed);
 	CHECK(!delay.ready_for_return());
 	CHECK_EQ(delay.commit_return(110ms), RequestResult::NotReady);
 
-	auto keyframe_carrier = delay.push(packet({StreamKind::Video, 0, 8}, 120, 120, 1,
-		{1, 1'000}, true), 120ms);
+	auto keyframe_carrier = delay.push(packet({StreamKind::Video, 0, 8}, 120, 120, 1, {1, 1'000}, true), 120ms);
 	for (const auto &item : keyframe_carrier)
 		CHECK(item.delayed);
 	CHECK(delay.ready_for_return());
@@ -554,8 +515,7 @@ void returning_waits_for_live_keyframe_and_commit()
 	CHECK(!live_cut[0].delayed);
 	CHECK_EQ(live_cut[0].packet.metadata.stream.kind, StreamKind::Video);
 	CHECK(live_cut[0].packet.metadata.keyframe);
-	auto live = delay.push(packet({StreamKind::Video, 0, 8}, 130, 130, 1,
-		{1, 1'000}, false), 130ms);
+	auto live = delay.push(packet({StreamKind::Video, 0, 8}, 130, 130, 1, {1, 1'000}, false), 130ms);
 	CHECK_EQ(live.size(), 1U);
 	CHECK(!live[0].delayed);
 	CHECK_EQ(delay.finish_return(130ms), RequestResult::Accepted);
@@ -567,17 +527,14 @@ void return_aligns_audio_at_or_after_the_video_cut()
 	PacketDelay delay;
 	begin_activation(delay, 100ms);
 	for (int time : {0, 50, 100}) {
-		CHECK(delay.push(packet({StreamKind::Video, 0, 21}, time, time),
-			Duration{time}).empty());
-		CHECK(delay.push(packet({StreamKind::Audio, 0, 21}, time, time),
-			Duration{time}).empty());
+		CHECK(delay.push(packet({StreamKind::Video, 0, 21}, time, time), Duration{time}).empty());
+		CHECK(delay.push(packet({StreamKind::Audio, 0, 21}, time, time), Duration{time}).empty());
 	}
 	commit_activation(delay, 100ms);
 	CHECK_EQ(delay.poll(100ms).size(), 2U);
 	CHECK_EQ(delay.request_deactivate(100ms), RequestResult::Accepted);
 	(void)delay.push(packet({StreamKind::Audio, 0, 21}, 110, 110), 110ms);
-	(void)delay.push(packet({StreamKind::Video, 0, 21}, 120, 120, 1,
-		{1, 1'000}, true), 120ms);
+	(void)delay.push(packet({StreamKind::Video, 0, 21}, 120, 120, 1, {1, 1'000}, true), 120ms);
 	(void)delay.push(packet({StreamKind::Audio, 0, 21}, 120, 120), 120ms);
 	CHECK(delay.ready_for_return());
 	CHECK_EQ(delay.commit_return(120ms), RequestResult::Accepted);
@@ -619,20 +576,17 @@ void multi_video_return_protects_each_keyframe_until_commit()
 	CHECK_EQ(initial.size(), 3U);
 	observe_monotonic(initial);
 	CHECK_EQ(delay.request_deactivate(50ms), RequestResult::Accepted);
-	observe_monotonic(delay.push(packet(video_a, 60, 60, 1,
-		{1, 1'000}, true), 60ms));
+	observe_monotonic(delay.push(packet(video_a, 60, 60, 1, {1, 1'000}, true), 60ms));
 	observe_monotonic(delay.push(packet(audio, 60, 60), 60ms));
 	// A second A keyframe is already buffered before A60 becomes due. Once A60
 	// is consumed to keep the delayed branch moving, A80 must remain selected;
 	// waiting for a third A keyframe would freeze an otherwise-ready return.
-	observe_monotonic(delay.push(packet(video_a, 80, 80, 1,
-		{1, 1'000}, true), 80ms));
+	observe_monotonic(delay.push(packet(video_a, 80, 80, 1, {1, 1'000}, true), 80ms));
 	observe_monotonic(delay.push(packet(audio, 80, 80), 80ms));
 	CHECK(!delay.ready_for_return());
 	// A60 is consumed while B is missing, but A80 remains protected.
 	observe_monotonic(delay.poll(120ms));
-	observe_monotonic(delay.push(packet(video_b, 120, 120, 1,
-		{1, 1'000}, true), 120ms));
+	observe_monotonic(delay.push(packet(video_b, 120, 120, 1, {1, 1'000}, true), 120ms));
 	observe_monotonic(delay.push(packet(audio, 120, 120), 120ms));
 	CHECK(delay.ready_for_return());
 	CHECK_EQ(delay.commit_return(120ms), RequestResult::Accepted);
@@ -641,27 +595,22 @@ void multi_video_return_protects_each_keyframe_until_commit()
 	std::unordered_map<StreamKey, bool, StreamKeyHash> first_video_is_keyframe;
 	for (const auto &item : live) {
 		if (item.packet.metadata.stream.kind == StreamKind::Video &&
-			!first_video_is_keyframe.contains(item.packet.metadata.stream))
-			first_video_is_keyframe[item.packet.metadata.stream] =
-				item.packet.metadata.keyframe;
+		    !first_video_is_keyframe.contains(item.packet.metadata.stream))
+			first_video_is_keyframe[item.packet.metadata.stream] = item.packet.metadata.keyframe;
 	}
 	CHECK_EQ(first_video_is_keyframe.size(), 2U);
 	CHECK(first_video_is_keyframe.at(video_a));
 	CHECK(first_video_is_keyframe.at(video_b));
 	const auto video_a_cut = std::find_if(live.begin(), live.end(),
-		[&](const auto &item) {
-			return item.packet.metadata.stream == video_a;
-		});
+					      [&](const auto &item) { return item.packet.metadata.stream == video_a; });
 	CHECK(video_a_cut != live.end());
 	CHECK_EQ(video_a_cut->received_at, 80ms);
 
-	auto live_continuation = delay.push(packet(video_a, 140, 140, 1,
-		{1, 1'000}, false), 140ms);
+	auto live_continuation = delay.push(packet(video_a, 140, 140, 1, {1, 1'000}, false), 140ms);
 	CHECK_EQ(live_continuation.size(), 1U);
 	observe_monotonic(live_continuation);
 	CHECK_EQ(delay.finish_return(140ms), RequestResult::Accepted);
-	auto bypass = delay.push(packet(video_a, 150, 150, 1,
-		{1, 1'000}, false), 150ms);
+	auto bypass = delay.push(packet(video_a, 150, 150, 1, {1, 1'000}, false), 150ms);
 	CHECK_EQ(bypass.size(), 1U);
 	observe_monotonic(bypass);
 	const StreamKey next_generation{StreamKind::Video, 0, 24};
@@ -687,10 +636,8 @@ void stalled_return_lanes_and_new_optional_video_do_not_deadlock()
 	commit_activation(delay, 50ms);
 	CHECK_EQ(delay.poll(50ms).size(), 2U);
 	CHECK_EQ(delay.request_deactivate(50ms), RequestResult::Accepted);
-	(void)delay.push(packet(optional_video, 61, 61, 1,
-		{1, 1'000}, false), 61ms);
-	(void)delay.push(packet(video_a, 62, 62, 1,
-		{1, 1'000}, true), 62ms);
+	(void)delay.push(packet(optional_video, 61, 61, 1, {1, 1'000}, false), 61ms);
+	(void)delay.push(packet(video_a, 62, 62, 1, {1, 1'000}, true), 62ms);
 	CHECK(!delay.ready_for_return());
 	CHECK(delay.ready_for_return(71ms));
 	CHECK_EQ(delay.commit_return(71ms), RequestResult::Accepted);
@@ -709,16 +656,14 @@ void return_without_keyframe_requirement_preserves_the_live_cut()
 	PacketDelay delay{config};
 	begin_activation(delay, 10ms);
 	for (int time : {0, 10}) {
-		CHECK(delay.push(packet(video, time, time, 1,
-			{1, 1'000}, false), Duration{time}).empty());
+		CHECK(delay.push(packet(video, time, time, 1, {1, 1'000}, false), Duration{time}).empty());
 		CHECK(delay.push(packet(audio, time, time), Duration{time}).empty());
 	}
 	commit_activation(delay, 10ms);
 	CHECK_EQ(delay.poll(10ms).size(), 2U);
 	CHECK_EQ(delay.request_deactivate(10ms), RequestResult::Accepted);
 	CHECK(delay.ready_for_return(10ms));
-	CHECK(delay.push(packet(video, 20, 20, 1,
-		{1, 1'000}, false), 20ms).empty());
+	CHECK(delay.push(packet(video, 20, 20, 1, {1, 1'000}, false), 20ms).empty());
 	CHECK(delay.push(packet(audio, 20, 20), 20ms).empty());
 	CHECK_EQ(delay.commit_return(20ms), RequestResult::Accepted);
 	auto live = delay.poll(20ms);
@@ -748,8 +693,7 @@ void cancel_uses_the_same_transactional_return_protocol()
 	CHECK(filling.push(packet({StreamKind::Video, 0, 9}, 0, 0), 0ms).empty());
 	CHECK_EQ(filling.request_cancel(10ms), RequestResult::Accepted);
 	CHECK(!filling.ready_for_return());
-	CHECK(filling.push(packet({StreamKind::Video, 0, 9}, 11, 11, 1,
-		{1, 1'000}, true), 11ms).empty());
+	CHECK(filling.push(packet({StreamKind::Video, 0, 9}, 11, 11, 1, {1, 1'000}, true), 11ms).empty());
 	CHECK(filling.ready_for_return());
 	CHECK_EQ(filling.commit_return(11ms), RequestResult::Accepted);
 	CHECK_EQ(filling.poll(11ms).size(), 1U);
@@ -763,16 +707,11 @@ void temporal_pruning_keeps_a_decodable_video_front()
 	config.retention_headroom = 20ms;
 	PacketDelay delay{config};
 	begin_activation(delay, 100ms);
-	CHECK(delay.push(packet({StreamKind::Video, 0, 10}, 0, 0, 2,
-		{1, 1'000}, true), 0ms).empty());
-	CHECK(delay.push(packet({StreamKind::Video, 0, 10}, 10, 10, 2,
-		{1, 1'000}, false), 10ms).empty());
-	CHECK(delay.push(packet({StreamKind::Video, 0, 10}, 50, 50, 2,
-		{1, 1'000}, true), 50ms).empty());
-	CHECK(delay.push(packet({StreamKind::Video, 0, 10}, 60, 60, 2,
-		{1, 1'000}, false), 60ms).empty());
-	CHECK(delay.push(packet({StreamKind::Video, 0, 10}, 150, 150, 2,
-		{1, 1'000}, false), 150ms).empty());
+	CHECK(delay.push(packet({StreamKind::Video, 0, 10}, 0, 0, 2, {1, 1'000}, true), 0ms).empty());
+	CHECK(delay.push(packet({StreamKind::Video, 0, 10}, 10, 10, 2, {1, 1'000}, false), 10ms).empty());
+	CHECK(delay.push(packet({StreamKind::Video, 0, 10}, 50, 50, 2, {1, 1'000}, true), 50ms).empty());
+	CHECK(delay.push(packet({StreamKind::Video, 0, 10}, 60, 60, 2, {1, 1'000}, false), 60ms).empty());
+	CHECK(delay.push(packet({StreamKind::Video, 0, 10}, 150, 150, 2, {1, 1'000}, false), 150ms).empty());
 	delay.prune(200ms);
 	CHECK_EQ(delay.metrics(200ms).buffered_packets, 3U);
 	CHECK_EQ(delay.metrics(200ms).pruned_retention_packets, 2U);
@@ -821,7 +760,7 @@ void capacity_limits_include_payload_metadata_and_owner_memory()
 	begin_activation(retained, 1s);
 	auto owner = std::make_shared<std::array<std::byte, 100>>();
 	Packet alias_packet{{{StreamKind::Video, 0, 0}, 0, 0, 1, {1, 1'000}, true, 0},
-		SharedPayload::alias(owner, owner->data(), 1, owner->size())};
+			    SharedPayload::alias(owner, owner->data(), 1, owner->size())};
 	auto alias_output = retained.push(std::move(alias_packet), 0ms);
 	CHECK_EQ(retained.state(), DelayState::Error);
 	CHECK_EQ(alias_output.size(), 1U);
@@ -830,34 +769,28 @@ void capacity_limits_include_payload_metadata_and_owner_memory()
 void invalid_timebase_and_timestamp_overflow_fail_open()
 {
 	PacketDelay external;
-	CHECK(!external.observe_external_output(
-		{{StreamKind::Video, 0, 1}, 0, 0, 1, {0, 1}, true, 0}));
+	CHECK(!external.observe_external_output({{StreamKind::Video, 0, 1}, 0, 0, 1, {0, 1}, true, 0}));
 	CHECK_EQ(external.state(), DelayState::Error);
 	CHECK_EQ(external.recover(0ms), RequestResult::Accepted);
-	CHECK(external.observe_external_output(
-		{{StreamKind::Video, 0, 1}, 10, 10, 1, {1, 1'000}, true, 0}));
-	CHECK(!external.observe_external_output(
-		{{StreamKind::Video, 0, 1}, 9, 9, 1, {1, 1'000}, false, 0}));
+	CHECK(external.observe_external_output({{StreamKind::Video, 0, 1}, 10, 10, 1, {1, 1'000}, true, 0}));
+	CHECK(!external.observe_external_output({{StreamKind::Video, 0, 1}, 9, 9, 1, {1, 1'000}, false, 0}));
 	CHECK_EQ(external.state(), DelayState::Error);
 
 	PacketDelay exact_order;
-	CHECK(exact_order.observe_external_output({{StreamKind::Audio, 0, 1},
-		9'007'199'254'740'993LL, 9'007'199'254'740'993LL, 1,
-		{1, 1}, true, 0}));
-	CHECK(!exact_order.observe_external_output({{StreamKind::Audio, 1, 1},
-		9'007'199'254'740'992LL, 9'007'199'254'740'992LL, 1,
-		{2, 1}, true, 0}));
+	CHECK(exact_order.observe_external_output(
+		{{StreamKind::Audio, 0, 1}, 9'007'199'254'740'993LL, 9'007'199'254'740'993LL, 1, {1, 1}, true, 0}));
+	CHECK(!exact_order.observe_external_output(
+		{{StreamKind::Audio, 1, 1}, 9'007'199'254'740'992LL, 9'007'199'254'740'992LL, 1, {2, 1}, true, 0}));
 	CHECK_EQ(exact_order.state(), DelayState::Error);
 
 	// A long-double estimate can collapse these values on platforms where it
 	// has only binary64 precision. The exact bridge must still find +100 ticks.
 	constexpr auto large_timestamp = std::int64_t{1} << 60;
 	PacketDelay exact_bridge;
-	CHECK(exact_bridge.observe_external_output({{StreamKind::Audio, 0, 1},
-		large_timestamp + 100, large_timestamp + 100, 1,
-		{1, 1}, true, 0}));
-	auto bridged = exact_bridge.push(packet({StreamKind::Video, 0, 1},
-		large_timestamp, large_timestamp, 1, {1, 1}), 0ms);
+	CHECK(exact_bridge.observe_external_output(
+		{{StreamKind::Audio, 0, 1}, large_timestamp + 100, large_timestamp + 100, 1, {1, 1}, true, 0}));
+	auto bridged =
+		exact_bridge.push(packet({StreamKind::Video, 0, 1}, large_timestamp, large_timestamp, 1, {1, 1}), 0ms);
 	CHECK_EQ(exact_bridge.state(), DelayState::Bypass);
 	CHECK_EQ(bridged.size(), 1U);
 	CHECK_EQ(bridged[0].packet.metadata.dts, large_timestamp + 100);
@@ -869,45 +802,40 @@ void invalid_timebase_and_timestamp_overflow_fail_open()
 	const StreamKey new_audio{StreamKind::Audio, 0, 2};
 	const StreamKey second_audio{StreamKind::Audio, 1, 1};
 	PacketDelay exact_common_epoch;
-	CHECK(exact_common_epoch.observe_external_output({old_audio,
-		637'552'436'098'056'101LL, 637'552'436'098'056'101LL, 1,
-		{1, 847'619'862}, true, 0}));
+	CHECK(exact_common_epoch.observe_external_output(
+		{old_audio, 637'552'436'098'056'101LL, 637'552'436'098'056'101LL, 1, {1, 847'619'862}, true, 0}));
 	begin_activation(exact_common_epoch, 0ms);
-	CHECK(exact_common_epoch.push(packet(new_audio, 0, 0, 1,
-		{1, 847'619'862}), 0ms).empty());
-	CHECK(exact_common_epoch.push(packet(second_audio, 0, 0, 1,
-		{1, 2'123'433'047}), 0ms).empty());
+	CHECK(exact_common_epoch.push(packet(new_audio, 0, 0, 1, {1, 847'619'862}), 0ms).empty());
+	CHECK(exact_common_epoch.push(packet(second_audio, 0, 0, 1, {1, 2'123'433'047}), 0ms).empty());
 	CHECK(exact_common_epoch.ready_for_delayed(0ms));
 	CHECK_EQ(exact_common_epoch.commit_delayed(0ms), RequestResult::Accepted);
 	auto common_epoch = exact_common_epoch.poll(0ms);
-	auto advanced = exact_common_epoch.push(packet(new_audio, 1, 1, 1,
-		{1, 847'619'862}), 1ms);
+	auto advanced = exact_common_epoch.push(packet(new_audio, 1, 1, 1, {1, 847'619'862}), 1ms);
 	common_epoch.insert(common_epoch.end(), std::make_move_iterator(advanced.begin()),
-		std::make_move_iterator(advanced.end()));
+			    std::make_move_iterator(advanced.end()));
 	const auto second = std::find_if(common_epoch.begin(), common_epoch.end(),
-		[&](const auto &item) {
-			return item.packet.metadata.stream == second_audio;
-		});
+					 [&](const auto &item) { return item.packet.metadata.stream == second_audio; });
 	CHECK(second != common_epoch.end());
 	CHECK_EQ(second->packet.metadata.dts, 1'597'178'136'920'496'160LL);
 	CHECK_EQ(second->packet.metadata.pts, 1'597'178'136'920'496'160LL);
 
 	PacketDelay invalid;
 	begin_activation(invalid, 10ms);
-	auto invalid_output = invalid.push(packet({StreamKind::Video, 0, 0}, 0, 0, 1,
-		{0, 90'000}), 0ms);
+	auto invalid_output = invalid.push(packet({StreamKind::Video, 0, 0}, 0, 0, 1, {0, 90'000}), 0ms);
 	CHECK_EQ(invalid.state(), DelayState::Error);
 	CHECK_EQ(invalid_output.size(), 1U);
 	CHECK_EQ(invalid.recover(1ms), RequestResult::Accepted);
 
 	PacketDelay overflow;
 	begin_activation(overflow, 1ms);
-	CHECK(overflow.push(packet({StreamKind::Video, 0, 0},
-		std::numeric_limits<std::int64_t>::max(),
-		std::numeric_limits<std::int64_t>::max()), 0ms).empty());
-	CHECK(overflow.push(packet({StreamKind::Video, 0, 0},
-		std::numeric_limits<std::int64_t>::max(),
-		std::numeric_limits<std::int64_t>::max()), 1ms).empty());
+	CHECK(overflow.push(packet({StreamKind::Video, 0, 0}, std::numeric_limits<std::int64_t>::max(),
+				   std::numeric_limits<std::int64_t>::max()),
+			    0ms)
+		      .empty());
+	CHECK(overflow.push(packet({StreamKind::Video, 0, 0}, std::numeric_limits<std::int64_t>::max(),
+				   std::numeric_limits<std::int64_t>::max()),
+			    1ms)
+		      .empty());
 	CHECK(overflow.ready_for_delayed(1ms));
 	CHECK_EQ(overflow.commit_delayed(1ms), RequestResult::InvalidState);
 	CHECK_EQ(overflow.state(), DelayState::Error);
@@ -917,25 +845,21 @@ void invalid_timebase_and_timestamp_overflow_fail_open()
 	conversion_config.max_stream_gap = 0ms;
 	PacketDelay conversion{conversion_config};
 	begin_activation(conversion, 1s);
-	const TimeBase unrepresentable_ticks{1,
-		std::numeric_limits<std::int64_t>::max()};
-	CHECK(conversion.push(packet({StreamKind::Audio, 0, 2}, 0, 0, 1,
-		unrepresentable_ticks), 0ms).empty());
-	CHECK(conversion.push(packet({StreamKind::Audio, 0, 2}, 1, 1, 1,
-		unrepresentable_ticks), 1s).empty());
+	const TimeBase unrepresentable_ticks{1, std::numeric_limits<std::int64_t>::max()};
+	CHECK(conversion.push(packet({StreamKind::Audio, 0, 2}, 0, 0, 1, unrepresentable_ticks), 0ms).empty());
+	CHECK(conversion.push(packet({StreamKind::Audio, 0, 2}, 1, 1, 1, unrepresentable_ticks), 1s).empty());
 	CHECK(conversion.ready_for_delayed(1s));
 	CHECK_EQ(conversion.commit_delayed(1s), RequestResult::InvalidState);
 	CHECK_EQ(conversion.state(), DelayState::Error);
 
 	PacketDelay prefix;
 	begin_activation(prefix, 100ms);
-	CHECK(prefix.push(packet({StreamKind::Video, 0, 3}, 0, 0, 1,
-		{1, 1'000}, true), 0ms).empty());
-	CHECK(prefix.push(packet({StreamKind::Video, 0, 3},
-		std::numeric_limits<std::int64_t>::max(), 1, 1,
-		{1, 1'000}, false), 1ms).empty());
-	CHECK(prefix.push(packet({StreamKind::Video, 0, 3}, 100, 100, 1,
-		{1, 1'000}, false), 100ms).empty());
+	CHECK(prefix.push(packet({StreamKind::Video, 0, 3}, 0, 0, 1, {1, 1'000}, true), 0ms).empty());
+	CHECK(prefix.push(packet({StreamKind::Video, 0, 3}, std::numeric_limits<std::int64_t>::max(), 1, 1, {1, 1'000},
+				 false),
+			  1ms)
+		      .empty());
+	CHECK(prefix.push(packet({StreamKind::Video, 0, 3}, 100, 100, 1, {1, 1'000}, false), 100ms).empty());
 	commit_activation(prefix, 200ms);
 	auto valid_prefix = prefix.poll(200ms);
 	CHECK_EQ(valid_prefix.size(), 1U);
@@ -1005,14 +929,11 @@ void validation_and_stream_metrics_are_deterministic()
 	DelayConfig bounded_streams_config;
 	bounded_streams_config.max_streams = 1;
 	PacketDelay bounded_streams{bounded_streams_config};
-	CHECK_EQ(bounded_streams.push(packet({StreamKind::Audio, 0, 1},
-		0, 0), 0ms).size(), 1U);
-	auto next_generation = bounded_streams.push(packet({StreamKind::Audio, 0, 2},
-		0, 0), 0ms);
+	CHECK_EQ(bounded_streams.push(packet({StreamKind::Audio, 0, 1}, 0, 0), 0ms).size(), 1U);
+	auto next_generation = bounded_streams.push(packet({StreamKind::Audio, 0, 2}, 0, 0), 0ms);
 	CHECK_EQ(next_generation.size(), 1U);
 	CHECK_EQ(bounded_streams.state(), DelayState::Bypass);
-	auto excess_track = bounded_streams.push(packet({StreamKind::Audio, 1, 1},
-		0, 0), 0ms);
+	auto excess_track = bounded_streams.push(packet({StreamKind::Audio, 1, 1}, 0, 0), 0ms);
 	CHECK_EQ(excess_track.size(), 1U);
 	CHECK_EQ(bounded_streams.state(), DelayState::Error);
 
@@ -1037,8 +958,8 @@ void estimate_and_payload_lifetime_are_accounted()
 	CHECK_EQ(estimate_payload_bytes(1, 1ms), 1U);
 	CHECK_EQ(estimate_payload_bytes(0, 1s), 0U);
 	CHECK_EQ(estimate_payload_bytes(std::numeric_limits<std::uint64_t>::max(),
-		Duration{std::numeric_limits<Duration::rep>::max()}),
-		std::numeric_limits<std::size_t>::max());
+					Duration{std::numeric_limits<Duration::rep>::max()}),
+		 std::numeric_limits<std::size_t>::max());
 
 	struct Owner {
 		std::array<std::byte, 2> bytes{};
@@ -1048,7 +969,7 @@ void estimate_and_payload_lifetime_are_accounted()
 	auto owner = std::make_shared<Owner>();
 	std::weak_ptr<Owner> weak = owner;
 	Packet input{{{StreamKind::Video, 0, 0}, 0, 0, 1, {1, 1'000}, true, 0},
-		SharedPayload::alias(owner, owner->bytes.data(), owner->bytes.size())};
+		     SharedPayload::alias(owner, owner->bytes.data(), owner->bytes.size())};
 	CHECK(delay.push(std::move(input), 0ms).empty());
 	owner.reset();
 	CHECK(!weak.expired());
@@ -1066,8 +987,10 @@ void concurrent_bypass_producers_are_safe()
 	for (int thread_index = 0; thread_index < thread_count; ++thread_index) {
 		threads.emplace_back([&, thread_index] {
 			for (int index = 0; index < packets_per_thread; ++index) {
-				auto result = delay.push(packet({StreamKind::Audio,
-					static_cast<std::uint32_t>(thread_index), 0}, index, index, 0), 0ms);
+				auto result = delay.push(
+					packet({StreamKind::Audio, static_cast<std::uint32_t>(thread_index), 0}, index,
+					       index, 0),
+					0ms);
 				if (result.size() == 1 && !result[0].delayed)
 					++outputs;
 			}
@@ -1076,8 +999,7 @@ void concurrent_bypass_producers_are_safe()
 	for (auto &thread : threads)
 		thread.join();
 	CHECK_EQ(outputs.load(), thread_count * packets_per_thread);
-	CHECK_EQ(delay.metrics(0ms).bypassed_packets,
-		static_cast<std::uint64_t>(thread_count * packets_per_thread));
+	CHECK_EQ(delay.metrics(0ms).bypassed_packets, static_cast<std::uint64_t>(thread_count * packets_per_thread));
 }
 
 struct TestCase {

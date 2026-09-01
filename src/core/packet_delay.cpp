@@ -11,15 +11,13 @@
 namespace obs_delay::core {
 namespace {
 
-template<typename Integer>
-void saturating_add(Integer &value, Integer increment) noexcept
+template<typename Integer> void saturating_add(Integer &value, Integer increment) noexcept
 {
 	const auto maximum = std::numeric_limits<Integer>::max();
 	value = increment > maximum - value ? maximum : value + increment;
 }
 
-[[nodiscard]] bool checked_add_size(std::size_t left, std::size_t right,
-	std::size_t &result) noexcept
+[[nodiscard]] bool checked_add_size(std::size_t left, std::size_t right, std::size_t &result) noexcept
 {
 	if (right > std::numeric_limits<std::size_t>::max() - left)
 		return false;
@@ -45,13 +43,12 @@ void saturating_add(Integer &value, Integer increment) noexcept
 }
 
 [[nodiscard]] std::optional<long double> normalized_timestamp(std::int64_t timestamp,
-	const TimeBase &time_base) noexcept
+							      const TimeBase &time_base) noexcept
 {
 	if (!time_base.valid())
 		return std::nullopt;
 	const long double result =
-		static_cast<long double>(timestamp) /
-		static_cast<long double>(time_base.denominator);
+		static_cast<long double>(timestamp) / static_cast<long double>(time_base.denominator);
 	if (!std::isfinite(result))
 		return std::nullopt;
 	return result;
@@ -71,7 +68,7 @@ void saturating_add(Integer &value, Integer increment) noexcept
 [[nodiscard]] std::uint64_t magnitude(std::int64_t value) noexcept
 {
 	return value >= 0 ? static_cast<std::uint64_t>(value)
-		: static_cast<std::uint64_t>(-(value + 1)) + std::uint64_t{1};
+			  : static_cast<std::uint64_t>(-(value + 1)) + std::uint64_t{1};
 }
 
 struct UInt192 {
@@ -86,15 +83,12 @@ struct UInt192 {
 		static_cast<std::uint32_t>(factor),
 		static_cast<std::uint32_t>(factor >> 32U),
 	};
-	for (std::size_t factor_index = 0; factor_index < factor_limbs.size();
-		++factor_index) {
+	for (std::size_t factor_index = 0; factor_index < factor_limbs.size(); ++factor_index) {
 		std::uint64_t carry = 0;
-		for (std::size_t source_index = 0;
-			source_index + factor_index < result.limbs.size(); ++source_index) {
+		for (std::size_t source_index = 0; source_index + factor_index < result.limbs.size(); ++source_index) {
 			const auto destination = source_index + factor_index;
 			const std::uint64_t current =
-				static_cast<std::uint64_t>(source.limbs[source_index]) *
-					factor_limbs[factor_index] +
+				static_cast<std::uint64_t>(source.limbs[source_index]) * factor_limbs[factor_index] +
 				result.limbs[destination] + carry;
 			result.limbs[destination] = static_cast<std::uint32_t>(current);
 			carry = current >> 32U;
@@ -106,19 +100,16 @@ struct UInt192 {
 	return true;
 }
 
-[[nodiscard]] UInt192 product(std::uint64_t first, std::uint64_t second,
-	std::uint64_t third) noexcept
+[[nodiscard]] UInt192 product(std::uint64_t first, std::uint64_t second, std::uint64_t third) noexcept
 {
 	UInt192 result;
 	result.limbs[0] = 1;
-	const bool representable = multiply(result, first) && multiply(result, second) &&
-		multiply(result, third);
+	const bool representable = multiply(result, first) && multiply(result, second) && multiply(result, third);
 	(void)representable;
 	return result;
 }
 
-[[nodiscard]] int compare_unsigned(const UInt192 &left,
-	const UInt192 &right) noexcept
+[[nodiscard]] int compare_unsigned(const UInt192 &left, const UInt192 &right) noexcept
 {
 	for (std::size_t index = left.limbs.size(); index-- > 0;) {
 		if (left.limbs[index] < right.limbs[index])
@@ -131,25 +122,22 @@ struct UInt192 {
 
 // Exact comparison of timestamp / denominator. Six 32-bit limbs leave ample
 // headroom for the signed 64-bit cross products.
-[[nodiscard]] int compare_timestamps(std::int64_t left, const TimeBase &left_base,
-	std::int64_t right, const TimeBase &right_base) noexcept
+[[nodiscard]] int compare_timestamps(std::int64_t left, const TimeBase &left_base, std::int64_t right,
+				     const TimeBase &right_base) noexcept
 {
 	if (left < 0 && right >= 0)
 		return -1;
 	if (left >= 0 && right < 0)
 		return 1;
-	const auto left_product = product(magnitude(left),
-		std::uint64_t{1},
-		static_cast<std::uint64_t>(right_base.denominator));
-	const auto right_product = product(magnitude(right),
-		std::uint64_t{1},
-		static_cast<std::uint64_t>(left_base.denominator));
+	const auto left_product =
+		product(magnitude(left), std::uint64_t{1}, static_cast<std::uint64_t>(right_base.denominator));
+	const auto right_product =
+		product(magnitude(right), std::uint64_t{1}, static_cast<std::uint64_t>(left_base.denominator));
 	const int comparison = compare_unsigned(left_product, right_product);
 	return left < 0 ? -comparison : comparison;
 }
 
-[[nodiscard]] bool add_timestamp(std::int64_t value, std::int64_t offset,
-	std::int64_t &result) noexcept
+[[nodiscard]] bool add_timestamp(std::int64_t value, std::int64_t offset, std::int64_t &result) noexcept
 {
 	if (offset > 0 && value > std::numeric_limits<std::int64_t>::max() - offset)
 		return false;
@@ -160,8 +148,7 @@ struct UInt192 {
 }
 
 template<typename Predicate>
-[[nodiscard]] std::optional<std::int64_t> first_satisfying_nonnegative(
-	std::int64_t maximum, Predicate &&predicate)
+[[nodiscard]] std::optional<std::int64_t> first_satisfying_nonnegative(std::int64_t maximum, Predicate &&predicate)
 {
 	if (maximum < 0)
 		return std::nullopt;
@@ -191,39 +178,31 @@ template<typename Predicate>
 	return upper;
 }
 
-[[nodiscard]] std::optional<std::int64_t> delay_ticks(Duration delay,
-	const TimeBase &time_base) noexcept
+[[nodiscard]] std::optional<std::int64_t> delay_ticks(Duration delay, const TimeBase &time_base) noexcept
 {
 	if (delay.count() < 0 || !time_base.valid())
 		return std::nullopt;
 	const long double raw =
-		(static_cast<long double>(delay.count()) *
-			static_cast<long double>(time_base.denominator)) /
-		1'000.0L;
+		(static_cast<long double>(delay.count()) * static_cast<long double>(time_base.denominator)) / 1'000.0L;
 	const long double rounded = std::round(raw);
 	const long double upper_exclusive = std::ldexp(1.0L, 63);
-	if (!std::isfinite(rounded) || rounded < 0.0L ||
-		rounded >= upper_exclusive)
+	if (!std::isfinite(rounded) || rounded < 0.0L || rounded >= upper_exclusive)
 		return std::nullopt;
 	return static_cast<std::int64_t>(rounded);
 }
 
-[[nodiscard]] std::optional<std::int64_t> duration_ticks_ceil(Duration duration,
-	const TimeBase &time_base) noexcept
+[[nodiscard]] std::optional<std::int64_t> duration_ticks_ceil(Duration duration, const TimeBase &time_base) noexcept
 {
 	if (duration.count() < 0 || !time_base.valid())
 		return std::nullopt;
 	if (duration.count() == 0)
 		return std::int64_t{0};
 	const long double raw =
-		(static_cast<long double>(duration.count()) *
-			static_cast<long double>(time_base.denominator)) /
+		(static_cast<long double>(duration.count()) * static_cast<long double>(time_base.denominator)) /
 		1'000.0L;
-	const long double rounded = std::ceil(std::nextafter(raw,
-		std::numeric_limits<long double>::infinity()));
+	const long double rounded = std::ceil(std::nextafter(raw, std::numeric_limits<long double>::infinity()));
 	const long double upper_exclusive = std::ldexp(1.0L, 63);
-	if (!std::isfinite(rounded) || rounded < 0.0L ||
-		rounded >= upper_exclusive)
+	if (!std::isfinite(rounded) || rounded < 0.0L || rounded >= upper_exclusive)
 		return std::nullopt;
 	return static_cast<std::int64_t>(rounded);
 }
@@ -232,8 +211,7 @@ template<typename Predicate>
 {
 	std::int64_t pts = 0;
 	std::int64_t dts = 0;
-	if (!add_timestamp(packet.metadata.pts, offset, pts) ||
-		!add_timestamp(packet.metadata.dts, offset, dts))
+	if (!add_timestamp(packet.metadata.pts, offset, pts) || !add_timestamp(packet.metadata.dts, offset, dts))
 		return false;
 	packet.metadata.pts = pts;
 	packet.metadata.dts = dts;
@@ -264,21 +242,24 @@ std::string_view to_string(DelayState state) noexcept
 std::size_t StreamKeyHash::operator()(const StreamKey &key) const noexcept
 {
 	std::size_t seed = static_cast<std::size_t>(key.kind);
-	seed ^= static_cast<std::size_t>(key.track) + 0x9e3779b9U + (seed << 6U) +
-		(seed >> 2U);
+	seed ^= static_cast<std::size_t>(key.track) + 0x9e3779b9U + (seed << 6U) + (seed >> 2U);
 	const auto generation = static_cast<std::size_t>(key.generation ^ (key.generation >> 32U));
 	seed ^= generation + 0x9e3779b9U + (seed << 6U) + (seed >> 2U);
 	return seed;
 }
 
-SharedPayload::SharedPayload(std::shared_ptr<const void> owner, const std::byte *data,
-	std::size_t size, std::size_t retained_size) noexcept
-	: owner_(std::move(owner)), data_(data), size_(size), retained_size_(retained_size)
+SharedPayload::SharedPayload(std::shared_ptr<const void> owner, const std::byte *data, std::size_t size,
+			     std::size_t retained_size) noexcept
+	: owner_(std::move(owner)),
+	  data_(data),
+	  size_(size),
+	  retained_size_(retained_size)
 {
 }
 
 SharedPayload::SharedPayload(SharedPayload &&other) noexcept
-	: owner_(std::move(other.owner_)), data_(std::exchange(other.data_, nullptr)),
+	: owner_(std::move(other.owner_)),
+	  data_(std::exchange(other.data_, nullptr)),
 	  size_(std::exchange(other.size_, 0)),
 	  retained_size_(std::exchange(other.retained_size_, 0))
 {
@@ -301,8 +282,7 @@ SharedPayload SharedPayload::copy(std::span<const std::byte> bytes)
 	return from_vector(std::move(storage));
 }
 
-SharedPayload SharedPayload::from_vector(
-	std::shared_ptr<const std::vector<std::byte>> bytes)
+SharedPayload SharedPayload::from_vector(std::shared_ptr<const std::vector<std::byte>> bytes)
 {
 	if (!bytes)
 		throw std::invalid_argument("payload vector owner cannot be null");
@@ -312,8 +292,8 @@ SharedPayload SharedPayload::from_vector(
 	return SharedPayload{std::move(bytes), data, size, retained};
 }
 
-SharedPayload SharedPayload::alias(std::shared_ptr<const void> owner,
-	const std::byte *data, std::size_t size, std::size_t retained_size)
+SharedPayload SharedPayload::alias(std::shared_ptr<const void> owner, const std::byte *data, std::size_t size,
+				   std::size_t retained_size)
 {
 	if (size != 0 && (!owner || data == nullptr))
 		throw std::invalid_argument("non-empty aliased payload needs an owner and data");
@@ -321,19 +301,15 @@ SharedPayload SharedPayload::alias(std::shared_ptr<const void> owner,
 		retained_size = size;
 	if (retained_size < size)
 		throw std::invalid_argument("retained payload size cannot be smaller than its view");
-	return SharedPayload{std::move(owner), size == 0 ? nullptr : data, size,
-		retained_size};
+	return SharedPayload{std::move(owner), size == 0 ? nullptr : data, size, retained_size};
 }
 
-std::size_t estimate_payload_bytes(std::uint64_t total_bits_per_second,
-	Duration delay) noexcept
+std::size_t estimate_payload_bytes(std::uint64_t total_bits_per_second, Duration delay) noexcept
 {
 	if (delay.count() <= 0 || total_bits_per_second == 0)
 		return 0;
 	const long double bytes =
-		(static_cast<long double>(total_bits_per_second) *
-			static_cast<long double>(delay.count())) /
-		8'000.0L;
+		(static_cast<long double>(total_bits_per_second) * static_cast<long double>(delay.count())) / 8'000.0L;
 	const auto maximum = static_cast<long double>(std::numeric_limits<std::size_t>::max());
 	if (!std::isfinite(bytes) || bytes >= maximum)
 		return std::numeric_limits<std::size_t>::max();
@@ -343,11 +319,10 @@ std::size_t estimate_payload_bytes(std::uint64_t total_bits_per_second,
 PacketDelay::PacketDelay(DelayConfig config) : config_(config)
 {
 	if (config_.max_delay.count() < 0 || config_.retention_headroom.count() < 0 ||
-		config_.reorder_window.count() < 0 || config_.stream_stall_timeout.count() < 0 ||
-		config_.max_stream_gap.count() < 0)
+	    config_.reorder_window.count() < 0 || config_.stream_stall_timeout.count() < 0 ||
+	    config_.max_stream_gap.count() < 0)
 		throw std::invalid_argument("delay durations cannot be negative");
-	if (config_.max_delay.count() >
-		std::numeric_limits<Duration::rep>::max() - config_.retention_headroom.count())
+	if (config_.max_delay.count() > std::numeric_limits<Duration::rep>::max() - config_.retention_headroom.count())
 		throw std::invalid_argument("delay retention window overflows");
 	if (config_.max_buffered_packets == 0)
 		throw std::invalid_argument("max_buffered_packets must be finite and non-zero");
@@ -372,8 +347,7 @@ RequestResult PacketDelay::request_activate(Duration delay, TimePoint now)
 	if (!valid_delay_locked(delay))
 		return RequestResult::InvalidDelay;
 	if (state_ == DelayState::Preparing && !preparing_change_)
-		return delay == pending_target_delay_ ? RequestResult::NoOp
-			: RequestResult::InvalidState;
+		return delay == pending_target_delay_ ? RequestResult::NoOp : RequestResult::InvalidState;
 	if (state_ != DelayState::Bypass)
 		return RequestResult::InvalidState;
 
@@ -533,7 +507,7 @@ RequestResult PacketDelay::request_deactivate(TimePoint now)
 	if (state_ == DelayState::Error)
 		return RequestResult::InvalidState;
 	const bool was_delayed = state_ == DelayState::Delayed ||
-		(state_ == DelayState::Preparing && preparing_change_) || change_origin_delayed_;
+				 (state_ == DelayState::Preparing && preparing_change_) || change_origin_delayed_;
 	start_return_locked(was_delayed, now);
 	return RequestResult::Accepted;
 }
@@ -541,8 +515,7 @@ RequestResult PacketDelay::request_deactivate(TimePoint now)
 bool PacketDelay::ready_for_return() const
 {
 	std::scoped_lock lock{mutex_};
-	const auto now = last_observed_at_.value_or(
-		return_requested_at_.value_or(TimePoint{0}));
+	const auto now = last_observed_at_.value_or(return_requested_at_.value_or(TimePoint{0}));
 	return state_ == DelayState::Returning && return_ready_locked(now);
 }
 
@@ -785,8 +758,7 @@ std::vector<StreamMetrics> PacketDelay::stream_metrics(TimePoint now) const
 		item.stream = stream;
 		item.buffered_packets = queue.size();
 		for (const auto &queued : queue) {
-			saturating_add(item.buffered_payload_bytes,
-				queued.packet.payload.retained_size());
+			saturating_add(item.buffered_payload_bytes, queued.packet.payload.retained_size());
 			saturating_add(item.retained_bytes, queued.retained_bytes);
 		}
 		item.buffered_span = elapsed(queue.back().received_at, queue.front().received_at);
@@ -796,11 +768,9 @@ std::vector<StreamMetrics> PacketDelay::stream_metrics(TimePoint now) const
 		auto &item = metrics[queued.packet.metadata.stream];
 		item.stream = queued.packet.metadata.stream;
 		saturating_add(item.buffered_packets, std::size_t{1});
-		saturating_add(item.buffered_payload_bytes,
-			queued.packet.payload.retained_size());
+		saturating_add(item.buffered_payload_bytes, queued.packet.payload.retained_size());
 		saturating_add(item.retained_bytes, queued.retained_bytes);
-		item.oldest_packet_age = std::max(item.oldest_packet_age,
-			elapsed(now, queued.received_at));
+		item.oldest_packet_age = std::max(item.oldest_packet_age, elapsed(now, queued.received_at));
 	}
 	std::vector<StreamMetrics> result;
 	result.reserve(metrics.size());
@@ -808,9 +778,8 @@ std::vector<StreamMetrics> PacketDelay::stream_metrics(TimePoint now) const
 		(void)stream;
 		result.push_back(std::move(item));
 	}
-	std::sort(result.begin(), result.end(), [](const auto &left, const auto &right) {
-		return left.stream < right.stream;
-	});
+	std::sort(result.begin(), result.end(),
+		  [](const auto &left, const auto &right) { return left.stream < right.stream; });
 	return result;
 }
 
@@ -875,9 +844,7 @@ bool PacketDelay::valid_delay_locked(Duration delay) const noexcept
 
 Duration PacketDelay::reported_target_locked() const noexcept
 {
-	return state_ == DelayState::Preparing && preparing_change_
-		? pending_target_delay_
-		: target_delay_;
+	return state_ == DelayState::Preparing && preparing_change_ ? pending_target_delay_ : target_delay_;
 }
 
 bool PacketDelay::prepare_stream_locked(const StreamKey &stream)
@@ -891,8 +858,7 @@ bool PacketDelay::prepare_stream_locked(const StreamKey &stream)
 		known_timelines_.insert(timeline);
 	}
 	for (const auto &[queued_stream, queue] : queues_) {
-		if (queued_stream != stream && timeline_key(queued_stream) == timeline &&
-			!queue.empty()) {
+		if (queued_stream != stream && timeline_key(queued_stream) == timeline && !queue.empty()) {
 			enter_error_locked("stream generation changed while packets were buffered");
 			return false;
 		}
@@ -902,14 +868,10 @@ bool PacketDelay::prepare_stream_locked(const StreamKey &stream)
 	};
 	std::erase_if(active_streams_, replaced);
 	std::erase_if(latest_dts_, [&](const auto &item) { return replaced(item.first); });
-	std::erase_if(last_stream_seen_,
-		[&](const auto &item) { return replaced(item.first); });
-	std::erase_if(timestamp_offsets_,
-		[&](const auto &item) { return replaced(item.first); });
-	const bool return_lane_required = std::erase_if(return_required_video_,
-		replaced) != 0;
-	std::erase_if(return_keyframes_,
-		[&](const auto &item) { return replaced(item.first); });
+	std::erase_if(last_stream_seen_, [&](const auto &item) { return replaced(item.first); });
+	std::erase_if(timestamp_offsets_, [&](const auto &item) { return replaced(item.first); });
+	const bool return_lane_required = std::erase_if(return_required_video_, replaced) != 0;
+	std::erase_if(return_keyframes_, [&](const auto &item) { return replaced(item.first); });
 	if (return_lane_required && stream.kind == StreamKind::Video)
 		return_required_video_.insert(stream);
 	return true;
@@ -924,9 +886,8 @@ bool PacketDelay::enqueue_locked(Packet &packet, TimePoint now, std::uint64_t se
 		return false;
 	}
 	const auto stream = packet.metadata.stream;
-	const bool output_epoch_active = state_ == DelayState::Delayed ||
-		state_ == DelayState::Returning ||
-		(state_ == DelayState::Preparing && preparing_change_);
+	const bool output_epoch_active = state_ == DelayState::Delayed || state_ == DelayState::Returning ||
+					 (state_ == DelayState::Preparing && preparing_change_);
 	if (output_epoch_active && !timestamp_offsets_.contains(stream)) {
 		if (!create_timestamp_offset_locked(packet, target_delay_)) {
 			enter_error_locked("cannot create timestamp offset for a new stream");
@@ -935,10 +896,8 @@ bool PacketDelay::enqueue_locked(Packet &packet, TimePoint now, std::uint64_t se
 	}
 	if (output_epoch_active) {
 		const auto timeline = timeline_key(stream);
-		last_output_dts_.try_emplace(timeline,
-			TimestampHorizon{0, TimeBase{0, 0}, 0.0L});
-		max_output_pts_.try_emplace(timeline,
-			TimestampHorizon{0, TimeBase{0, 0}, 0.0L});
+		last_output_dts_.try_emplace(timeline, TimestampHorizon{0, TimeBase{0, 0}, 0.0L});
+		max_output_pts_.try_emplace(timeline, TimestampHorizon{0, TimeBase{0, 0}, 0.0L});
 	}
 	const auto packet_dts = ordering_dts_locked(packet);
 	if (!packet_dts) {
@@ -955,14 +914,11 @@ bool PacketDelay::enqueue_locked(Packet &packet, TimePoint now, std::uint64_t se
 	std::size_t packet_retained = 0;
 	std::size_t next_payload = 0;
 	std::size_t next_retained = 0;
-	const bool arithmetic_ok =
-		checked_add_size(payload_size, config_.metadata_bytes_per_packet, packet_retained) &&
-		checked_add_size(buffered_payload_bytes_, payload_size, next_payload) &&
-		checked_add_size(retained_bytes_, packet_retained, next_retained);
-	const bool exceeds_payload = config_.max_payload_bytes != 0 &&
-		next_payload > config_.max_payload_bytes;
-	const bool exceeds_retained = config_.max_retained_bytes != 0 &&
-		next_retained > config_.max_retained_bytes;
+	const bool arithmetic_ok = checked_add_size(payload_size, config_.metadata_bytes_per_packet, packet_retained) &&
+				   checked_add_size(buffered_payload_bytes_, payload_size, next_payload) &&
+				   checked_add_size(retained_bytes_, packet_retained, next_retained);
+	const bool exceeds_payload = config_.max_payload_bytes != 0 && next_payload > config_.max_payload_bytes;
+	const bool exceeds_retained = config_.max_retained_bytes != 0 && next_retained > config_.max_retained_bytes;
 	const bool exceeds_packets = buffered_packets_ >= config_.max_buffered_packets;
 	if (!arithmetic_ok || exceeds_payload || exceeds_retained || exceeds_packets) {
 		saturating_add(rejected_capacity_packets_, std::uint64_t{1});
@@ -975,20 +931,18 @@ bool PacketDelay::enqueue_locked(Packet &packet, TimePoint now, std::uint64_t se
 	++buffered_packets_;
 	buffered_payload_bytes_ = next_payload;
 	retained_bytes_ = next_retained;
-	auto [latest, inserted] = latest_dts_.try_emplace(queue.back().packet.metadata.stream,
-		*packet_dts);
-	if (!inserted && compare_timestamps(packet_dts->value, packet_dts->time_base,
-		latest->second.value, latest->second.time_base) > 0)
+	auto [latest, inserted] = latest_dts_.try_emplace(queue.back().packet.metadata.stream, *packet_dts);
+	if (!inserted && compare_timestamps(packet_dts->value, packet_dts->time_base, latest->second.value,
+					    latest->second.time_base) > 0)
 		latest->second = *packet_dts;
 	last_stream_seen_[queue.back().packet.metadata.stream] = now;
 	if (state_ == DelayState::Delayed || state_ == DelayState::Returning ||
-		(state_ == DelayState::Preparing && preparing_change_))
+	    (state_ == DelayState::Preparing && preparing_change_))
 		active_streams_.insert(queue.back().packet.metadata.stream);
 	return true;
 }
 
-bool PacketDelay::create_timestamp_offset_locked(const Packet &packet,
-	Duration base_delay)
+bool PacketDelay::create_timestamp_offset_locked(const Packet &packet, Duration base_delay)
 {
 	const auto stream = packet.metadata.stream;
 	if (timestamp_offsets_.contains(stream))
@@ -1001,8 +955,7 @@ bool PacketDelay::create_timestamp_offset_locked(const Packet &packet,
 	if (!add_timestamp(packet.metadata.dts, offset, shifted_dts))
 		return false;
 
-	const auto raise_to_horizon = [&](std::int64_t timestamp,
-		const TimestampHorizon &horizon, bool strict) {
+	const auto raise_to_horizon = [&](std::int64_t timestamp, const TimestampHorizon &horizon, bool strict) {
 		const auto &time_base = packet.metadata.time_base;
 		std::int64_t shifted = 0;
 		if (!add_timestamp(timestamp, offset, shifted))
@@ -1011,10 +964,10 @@ bool PacketDelay::create_timestamp_offset_locked(const Packet &packet,
 			std::int64_t candidate_offset = 0;
 			std::int64_t candidate = 0;
 			if (!add_timestamp(offset, additional, candidate_offset) ||
-				!add_timestamp(timestamp, candidate_offset, candidate))
+			    !add_timestamp(timestamp, candidate_offset, candidate))
 				return false;
-			const int comparison = compare_timestamps(candidate, time_base,
-				horizon.value, horizon.time_base);
+			const int comparison =
+				compare_timestamps(candidate, time_base, horizon.value, horizon.time_base);
 			return comparison > 0 || (!strict && comparison == 0);
 		};
 
@@ -1027,36 +980,31 @@ bool PacketDelay::create_timestamp_offset_locked(const Packet &packet,
 		std::int64_t maximum_additional = maximum - offset;
 		if (shifted >= 0)
 			maximum_additional = std::min(maximum_additional, maximum - shifted);
-		const auto additional = first_satisfying_nonnegative(maximum_additional,
-			satisfies);
+		const auto additional = first_satisfying_nonnegative(maximum_additional, satisfies);
 		if (!additional)
 			return false;
 		return add_timestamp(offset, *additional, offset);
 	};
 
 	const auto last_stream_dts = last_output_dts_.find(timeline_key(stream));
-	if (last_stream_dts != last_output_dts_.end() &&
-		last_stream_dts->second.time_base.valid() &&
-		!raise_to_horizon(packet.metadata.dts, last_stream_dts->second, true))
+	if (last_stream_dts != last_output_dts_.end() && last_stream_dts->second.time_base.valid() &&
+	    !raise_to_horizon(packet.metadata.dts, last_stream_dts->second, true))
 		return false;
-	if (last_emitted_dts_ &&
-		!raise_to_horizon(packet.metadata.dts, *last_emitted_dts_, false))
+	if (last_emitted_dts_ && !raise_to_horizon(packet.metadata.dts, *last_emitted_dts_, false))
 		return false;
 	const auto last_lane_pts = max_output_pts_.find(timeline_key(stream));
-	if (last_lane_pts != max_output_pts_.end() &&
-		last_lane_pts->second.time_base.valid() &&
-		!raise_to_horizon(packet.metadata.pts, last_lane_pts->second, true))
+	if (last_lane_pts != max_output_pts_.end() && last_lane_pts->second.time_base.valid() &&
+	    !raise_to_horizon(packet.metadata.pts, last_lane_pts->second, true))
 		return false;
 	std::int64_t shifted_pts = 0;
 	if (!add_timestamp(packet.metadata.dts, offset, shifted_dts) ||
-		!add_timestamp(packet.metadata.pts, offset, shifted_pts))
+	    !add_timestamp(packet.metadata.pts, offset, shifted_pts))
 		return false;
 	timestamp_offsets_.emplace(stream, offset);
 	return true;
 }
 
-bool PacketDelay::unify_timestamp_offsets_locked(
-	const std::vector<const Packet *> &epoch_fronts)
+bool PacketDelay::unify_timestamp_offsets_locked(const std::vector<const Packet *> &epoch_fronts)
 {
 	std::optional<TimestampHorizon> common_shift;
 	for (const auto *packet : epoch_fronts) {
@@ -1065,14 +1013,12 @@ bool PacketDelay::unify_timestamp_offsets_locked(
 		const auto offset = timestamp_offsets_.find(packet->metadata.stream);
 		if (offset == timestamp_offsets_.end())
 			return false;
-		const auto normalized = normalized_timestamp(offset->second,
-			packet->metadata.time_base);
+		const auto normalized = normalized_timestamp(offset->second, packet->metadata.time_base);
 		if (!normalized)
 			return false;
-		const TimestampHorizon shift{offset->second, packet->metadata.time_base,
-			*normalized};
-		if (!common_shift || compare_timestamps(shift.value, shift.time_base,
-			common_shift->value, common_shift->time_base) > 0)
+		const TimestampHorizon shift{offset->second, packet->metadata.time_base, *normalized};
+		if (!common_shift ||
+		    compare_timestamps(shift.value, shift.time_base, common_shift->value, common_shift->time_base) > 0)
 			common_shift = shift;
 	}
 	if (!common_shift)
@@ -1082,8 +1028,8 @@ bool PacketDelay::unify_timestamp_offsets_locked(
 		const auto &time_base = packet->metadata.time_base;
 		const auto ticks = first_satisfying_nonnegative(
 			std::numeric_limits<std::int64_t>::max(), [&](std::int64_t candidate) {
-				return compare_timestamps(candidate, time_base,
-					common_shift->value, common_shift->time_base) >= 0;
+				return compare_timestamps(candidate, time_base, common_shift->value,
+							  common_shift->time_base) >= 0;
 			});
 		if (!ticks)
 			return false;
@@ -1094,7 +1040,7 @@ bool PacketDelay::unify_timestamp_offsets_locked(
 		std::int64_t shifted_pts = 0;
 		std::int64_t shifted_dts = 0;
 		if (!add_timestamp(packet->metadata.pts, offset->second, shifted_pts) ||
-			!add_timestamp(packet->metadata.dts, offset->second, shifted_dts))
+		    !add_timestamp(packet->metadata.dts, offset->second, shifted_dts))
 			return false;
 	}
 	return true;
@@ -1117,10 +1063,8 @@ bool PacketDelay::begin_timestamp_epoch_locked()
 		return false;
 	for (const auto *packet : epoch_fronts) {
 		const auto timeline = timeline_key(packet->metadata.stream);
-		last_output_dts_.try_emplace(timeline,
-			TimestampHorizon{0, TimeBase{0, 0}, 0.0L});
-		max_output_pts_.try_emplace(timeline,
-			TimestampHorizon{0, TimeBase{0, 0}, 0.0L});
+		last_output_dts_.try_emplace(timeline, TimestampHorizon{0, TimeBase{0, 0}, 0.0L});
+		max_output_pts_.try_emplace(timeline, TimestampHorizon{0, TimeBase{0, 0}, 0.0L});
 	}
 
 	latest_dts_.clear();
@@ -1142,9 +1086,8 @@ bool PacketDelay::retimestamp_live_locked(Packet &packet)
 	if (!create_timestamp_offset_locked(packet, Duration{0}))
 		return false;
 	const auto offset = timestamp_offsets_.find(packet.metadata.stream);
-	return offset != timestamp_offsets_.end() &&
-		retimestamp(packet, offset->second) &&
-		note_output_timestamp_locked(packet.metadata);
+	return offset != timestamp_offsets_.end() && retimestamp(packet, offset->second) &&
+	       note_output_timestamp_locked(packet.metadata);
 }
 
 bool PacketDelay::note_output_timestamp_locked(const PacketMetadata &metadata)
@@ -1154,45 +1097,38 @@ bool PacketDelay::note_output_timestamp_locked(const PacketMetadata &metadata)
 	if (!output_dts || !output_pts)
 		return false;
 	if (last_emitted_dts_) {
-		const bool regressed = compare_timestamps(metadata.dts, metadata.time_base,
-			last_emitted_dts_->value, last_emitted_dts_->time_base) < 0;
+		const bool regressed = compare_timestamps(metadata.dts, metadata.time_base, last_emitted_dts_->value,
+							  last_emitted_dts_->time_base) < 0;
 		if (regressed)
 			return false;
 	}
-	last_emitted_dts_ = TimestampHorizon{metadata.dts, metadata.time_base,
-		*output_dts};
-	last_output_dts_[timeline_key(metadata.stream)] = TimestampHorizon{
-		metadata.dts, metadata.time_base, *output_dts};
+	last_emitted_dts_ = TimestampHorizon{metadata.dts, metadata.time_base, *output_dts};
+	last_output_dts_[timeline_key(metadata.stream)] =
+		TimestampHorizon{metadata.dts, metadata.time_base, *output_dts};
 	auto [maximum_pts, inserted] = max_output_pts_.try_emplace(
-		timeline_key(metadata.stream), TimestampHorizon{metadata.pts,
-			metadata.time_base, *output_pts});
+		timeline_key(metadata.stream), TimestampHorizon{metadata.pts, metadata.time_base, *output_pts});
 	if (!inserted && maximum_pts->second.time_base.valid()) {
-		const bool is_larger = compare_timestamps(metadata.pts,
-			metadata.time_base, maximum_pts->second.value,
-			maximum_pts->second.time_base) > 0;
+		const bool is_larger = compare_timestamps(metadata.pts, metadata.time_base, maximum_pts->second.value,
+							  maximum_pts->second.time_base) > 0;
 		if (is_larger)
-			maximum_pts->second = TimestampHorizon{metadata.pts,
-				metadata.time_base, *output_pts};
+			maximum_pts->second = TimestampHorizon{metadata.pts, metadata.time_base, *output_pts};
 	}
 	if (!maximum_pts->second.time_base.valid())
-		maximum_pts->second = TimestampHorizon{metadata.pts,
-			metadata.time_base, *output_pts};
+		maximum_pts->second = TimestampHorizon{metadata.pts, metadata.time_base, *output_pts};
 	return true;
 }
 
-std::optional<PacketDelay::TimestampHorizon> PacketDelay::ordering_dts_locked(
-	const Packet &packet) const noexcept
+std::optional<PacketDelay::TimestampHorizon> PacketDelay::ordering_dts_locked(const Packet &packet) const noexcept
 {
 	const auto offset = timestamp_offsets_.find(packet.metadata.stream);
-	const auto ticks = offset == timestamp_offsets_.end() ? std::int64_t{0}
-		: offset->second;
+	const auto ticks = offset == timestamp_offsets_.end() ? std::int64_t{0} : offset->second;
 	std::int64_t shifted = 0;
-	if (!add_timestamp(packet.metadata.dts, ticks, shifted) ||
-		!packet.metadata.time_base.valid())
+	if (!add_timestamp(packet.metadata.dts, ticks, shifted) || !packet.metadata.time_base.valid())
 		return std::nullopt;
 	const auto normalized = normalized_timestamp(shifted, packet.metadata.time_base);
-	return normalized ? std::optional<TimestampHorizon>{TimestampHorizon{
-		shifted, packet.metadata.time_base, *normalized}} : std::nullopt;
+	return normalized ? std::optional<TimestampHorizon>{TimestampHorizon{shifted, packet.metadata.time_base,
+									     *normalized}}
+			  : std::nullopt;
 }
 
 std::vector<OutputPacket> PacketDelay::drain_ready_locked(TimePoint now)
@@ -1216,29 +1152,29 @@ std::vector<OutputPacket> PacketDelay::drain_ready_locked(TimePoint now)
 			const auto latest = latest_dts_.find(stream);
 			if (latest == latest_dts_.end())
 				return output;
-			if (!watermark || compare_timestamps(latest->second.value,
-				latest->second.time_base, watermark->value,
-				watermark->time_base) < 0)
+			if (!watermark || compare_timestamps(latest->second.value, latest->second.time_base,
+							     watermark->value, watermark->time_base) < 0)
 				watermark = latest->second;
 		}
 
 		auto candidate_queue = queues_.end();
 		TimestampHorizon candidate_dts{};
 		for (auto iterator = queues_.begin(); iterator != queues_.end(); ++iterator) {
-			if (iterator->second.empty() ||
-				!due(now, iterator->second.front().received_at, target_delay_))
+			if (iterator->second.empty() || !due(now, iterator->second.front().received_at, target_delay_))
 				continue;
 			const auto dts = ordering_dts_locked(iterator->second.front().packet);
 			if (!dts) {
 				enter_error_locked("invalid queued packet time base");
 				return output;
 			}
-			const int comparison = candidate_queue == queues_.end() ? -1
-				: compare_timestamps(dts->value, dts->time_base,
-					candidate_dts.value, candidate_dts.time_base);
+			const int comparison = candidate_queue == queues_.end()
+						       ? -1
+						       : compare_timestamps(dts->value, dts->time_base,
+									    candidate_dts.value,
+									    candidate_dts.time_base);
 			if (candidate_queue == queues_.end() || comparison < 0 ||
-				(comparison == 0 && iterator->second.front().sequence <
-					candidate_queue->second.front().sequence)) {
+			    (comparison == 0 &&
+			     iterator->second.front().sequence < candidate_queue->second.front().sequence)) {
 				candidate_queue = iterator;
 				candidate_dts = *dts;
 			}
@@ -1249,12 +1185,12 @@ std::vector<OutputPacket> PacketDelay::drain_ready_locked(TimePoint now)
 		if (state_ == DelayState::Returning && !return_committed_) {
 			const auto stream = candidate_queue->first;
 			if (!config_.require_video_keyframe && return_requested_at_ &&
-				candidate_queue->second.front().received_at >= *return_requested_at_)
+			    candidate_queue->second.front().received_at >= *return_requested_at_)
 				break;
 			if (stream.kind == StreamKind::Video) {
 				const auto cut = return_keyframes_.find(stream);
 				if (cut != return_keyframes_.end() &&
-					candidate_queue->second.front().sequence >= cut->second) {
+				    candidate_queue->second.front().sequence >= cut->second) {
 					if (return_ready_locked(now))
 						break;
 					// Another video lane has not reached a usable keyframe yet.
@@ -1269,13 +1205,12 @@ std::vector<OutputPacket> PacketDelay::drain_ready_locked(TimePoint now)
 					const auto video_queue = queues_.find(video_stream);
 					if (video_queue == queues_.end())
 						continue;
-					const auto keyframe = std::find_if(video_queue->second.begin(),
-						video_queue->second.end(), [sequence](const auto &item) {
-							return item.sequence == sequence;
-						});
+					const auto keyframe = std::find_if(
+						video_queue->second.begin(), video_queue->second.end(),
+						[sequence](const auto &item) { return item.sequence == sequence; });
 					if (keyframe != video_queue->second.end())
 						live_cut = !live_cut ? keyframe->received_at
-							: std::min(*live_cut, keyframe->received_at);
+								     : std::min(*live_cut, keyframe->received_at);
 				}
 				if (!live_cut)
 					live_cut = return_requested_at_;
@@ -1285,16 +1220,14 @@ std::vector<OutputPacket> PacketDelay::drain_ready_locked(TimePoint now)
 		}
 
 		if (watermark) {
-			const auto reorder_ticks = duration_ticks_ceil(config_.reorder_window,
-				candidate_dts.time_base);
+			const auto reorder_ticks = duration_ticks_ceil(config_.reorder_window, candidate_dts.time_base);
 			std::int64_t guarded_candidate = 0;
-			if (!reorder_ticks || !add_timestamp(candidate_dts.value,
-				*reorder_ticks, guarded_candidate)) {
+			if (!reorder_ticks || !add_timestamp(candidate_dts.value, *reorder_ticks, guarded_candidate)) {
 				enter_error_locked("reorder window cannot be represented safely");
 				return output;
 			}
-			if (compare_timestamps(guarded_candidate, candidate_dts.time_base,
-				watermark->value, watermark->time_base) > 0)
+			if (compare_timestamps(guarded_candidate, candidate_dts.time_base, watermark->value,
+					       watermark->time_base) > 0)
 				break;
 		}
 
@@ -1306,8 +1239,7 @@ std::vector<OutputPacket> PacketDelay::drain_ready_locked(TimePoint now)
 		buffered_payload_bytes_ -= queued.packet.payload.retained_size();
 		retained_bytes_ -= queued.retained_bytes;
 		const auto offset = timestamp_offsets_.find(queued.packet.metadata.stream);
-		if (offset == timestamp_offsets_.end() ||
-			!retimestamp(queued.packet, offset->second)) {
+		if (offset == timestamp_offsets_.end() || !retimestamp(queued.packet, offset->second)) {
 			enter_error_locked("timestamp overflow while retimestamping");
 			return output;
 		}
@@ -1315,8 +1247,7 @@ std::vector<OutputPacket> PacketDelay::drain_ready_locked(TimePoint now)
 			enter_error_locked("late packet would regress global output DTS");
 			return output;
 		}
-		output.push_back({std::move(queued.packet), queued.received_at, now,
-			queued.sequence, true});
+		output.push_back({std::move(queued.packet), queued.received_at, now, queued.sequence, true});
 		saturating_add(emitted_delayed_packets_, std::uint64_t{1});
 	}
 	return output;
@@ -1333,23 +1264,21 @@ std::vector<OutputPacket> PacketDelay::drain_return_pending_locked(TimePoint now
 		buffered_payload_bytes_ -= queued.packet.payload.retained_size();
 		retained_bytes_ -= queued.retained_bytes;
 		const auto offset = timestamp_offsets_.find(queued.packet.metadata.stream);
-		if (offset == timestamp_offsets_.end() ||
-			!retimestamp(queued.packet, offset->second) ||
-			!note_output_timestamp_locked(queued.packet.metadata)) {
+		if (offset == timestamp_offsets_.end() || !retimestamp(queued.packet, offset->second) ||
+		    !note_output_timestamp_locked(queued.packet.metadata)) {
 			enter_error_locked("live return packet would regress output timestamps");
 			return output;
 		}
-		output.push_back({std::move(queued.packet), queued.received_at, now,
-			queued.sequence, false});
+		output.push_back({std::move(queued.packet), queued.received_at, now, queued.sequence, false});
 	}
 	return output;
 }
 
 void PacketDelay::prune_locked(TimePoint now)
 {
-	const Duration retention_target = state_ == DelayState::Filling &&
-		change_origin_delayed_ ? std::max(target_delay_, previous_target_delay_)
-		: target_delay_;
+	const Duration retention_target = state_ == DelayState::Filling && change_origin_delayed_
+						  ? std::max(target_delay_, previous_target_delay_)
+						  : target_delay_;
 	const Duration retention = retention_target + config_.retention_headroom;
 	for (auto &[stream, queue] : queues_) {
 		if (queue.size() < 2)
@@ -1359,7 +1288,7 @@ void PacketDelay::prune_locked(TimePoint now)
 			if (!due(now, packet.received_at, retention))
 				break;
 			if (stream.kind != StreamKind::Video || !config_.require_video_keyframe ||
-				packet.packet.metadata.keyframe)
+			    packet.packet.metadata.keyframe)
 				keep = packet.sequence;
 		}
 		if (keep && queue.front().sequence != *keep)
@@ -1373,8 +1302,7 @@ void PacketDelay::prune_locked(TimePoint now)
 	}
 }
 
-void PacketDelay::prune_prefix_locked(PacketQueue &queue,
-	std::uint64_t keep_sequence)
+void PacketDelay::prune_prefix_locked(PacketQueue &queue, std::uint64_t keep_sequence)
 {
 	while (!queue.empty() && queue.front().sequence < keep_sequence) {
 		const auto payload = queue.front().packet.payload.retained_size();
@@ -1399,10 +1327,9 @@ std::optional<PacketDelay::CutPlan> PacketDelay::cut_plan_locked(TimePoint now) 
 	}
 	CutPlan plan;
 	for (const auto &[stream, queue] : queues_) {
-		const bool required = required_streams_.empty() ||
-			required_streams_.contains(stream);
+		const bool required = required_streams_.empty() || required_streams_.contains(stream);
 		if (config_.max_stream_gap.count() != 0 &&
-			elapsed(now, queue.back().received_at) > config_.max_stream_gap) {
+		    elapsed(now, queue.back().received_at) > config_.max_stream_gap) {
 			if (required)
 				return std::nullopt;
 			continue;
@@ -1412,18 +1339,18 @@ std::optional<PacketDelay::CutPlan> PacketDelay::cut_plan_locked(TimePoint now) 
 			if (!due(now, iterator->received_at, target_delay_))
 				continue;
 			if (stream.kind == StreamKind::Video && config_.require_video_keyframe &&
-				!iterator->packet.metadata.keyframe)
+			    !iterator->packet.metadata.keyframe)
 				continue;
 			const auto possible = std::prev(iterator.base());
 			if (target_delay_.count() != 0 &&
-				elapsed(queue.back().received_at, possible->received_at) < target_delay_)
+			    elapsed(queue.back().received_at, possible->received_at) < target_delay_)
 				continue;
 			bool continuous = true;
 			if (config_.max_stream_gap.count() != 0) {
 				auto previous = possible;
 				for (auto current = std::next(possible); current != queue.end(); ++current) {
 					if (elapsed(current->received_at, previous->received_at) >
-						config_.max_stream_gap) {
+					    config_.max_stream_gap) {
 						continuous = false;
 						break;
 					}
@@ -1453,16 +1380,14 @@ void PacketDelay::apply_cut_plan_locked(const CutPlan &plan)
 		const auto start = plan.start_sequence.find(iterator->first);
 		if (start == plan.start_sequence.end()) {
 			while (!iterator->second.empty()) {
-				const auto payload =
-					iterator->second.front().packet.payload.retained_size();
+				const auto payload = iterator->second.front().packet.payload.retained_size();
 				const auto retained = iterator->second.front().retained_bytes;
 				iterator->second.pop_front();
 				--buffered_packets_;
 				buffered_payload_bytes_ -= payload;
 				retained_bytes_ -= retained;
 				saturating_add(pruned_retention_packets_, std::uint64_t{1});
-				saturating_add(pruned_payload_bytes_,
-					static_cast<std::uint64_t>(payload));
+				saturating_add(pruned_payload_bytes_, static_cast<std::uint64_t>(payload));
 			}
 			iterator = queues_.erase(iterator);
 			continue;
@@ -1499,8 +1424,8 @@ void PacketDelay::start_return_locked(bool from_delayed, TimePoint now)
 void PacketDelay::observe_return_keyframe_locked(const QueuedPacket &packet)
 {
 	const auto stream = packet.packet.metadata.stream;
-	if (stream.kind != StreamKind::Video || !config_.require_video_keyframe ||
-		!return_requested_at_ || packet.received_at < *return_requested_at_)
+	if (stream.kind != StreamKind::Video || !config_.require_video_keyframe || !return_requested_at_ ||
+	    packet.received_at < *return_requested_at_)
 		return;
 	if (packet.packet.metadata.keyframe)
 		// Track the newest buffered keyframe. If an earlier keyframe becomes due
@@ -1515,8 +1440,7 @@ bool PacketDelay::return_ready_locked(TimePoint now) const noexcept
 	if (return_committed_)
 		return true;
 	for (const auto &stream : return_required_video_) {
-		if (!return_keyframes_.contains(stream) &&
-			!stream_is_stalled_locked(stream, now))
+		if (!return_keyframes_.contains(stream) && !stream_is_stalled_locked(stream, now))
 			return false;
 	}
 	return true;
@@ -1530,10 +1454,9 @@ bool PacketDelay::build_return_pending_locked()
 		if (queue == queues_.end())
 			continue;
 		const auto packet = std::find_if(queue->second.begin(), queue->second.end(),
-			[sequence](const auto &item) { return item.sequence == sequence; });
+						 [sequence](const auto &item) { return item.sequence == sequence; });
 		if (packet != queue->second.end())
-			live_cut = !live_cut ? packet->received_at
-				: std::min(*live_cut, packet->received_at);
+			live_cut = !live_cut ? packet->received_at : std::min(*live_cut, packet->received_at);
 	}
 	if (!live_cut)
 		live_cut = return_requested_at_;
@@ -1548,13 +1471,12 @@ bool PacketDelay::build_return_pending_locked()
 				video_start = start->second;
 		}
 		for (const auto &packet : queue) {
-			const bool keep_video = stream.kind == StreamKind::Video &&
-				((config_.require_video_keyframe && video_start &&
-					packet.sequence >= *video_start) ||
-				(!config_.require_video_keyframe && live_cut &&
-					packet.received_at >= *live_cut));
+			const bool keep_video =
+				stream.kind == StreamKind::Video &&
+				((config_.require_video_keyframe && video_start && packet.sequence >= *video_start) ||
+				 (!config_.require_video_keyframe && live_cut && packet.received_at >= *live_cut));
 			const bool keep_audio = stream.kind == StreamKind::Audio && live_cut &&
-				packet.received_at >= *live_cut;
+						packet.received_at >= *live_cut;
 			if (keep_video || keep_audio)
 				pending.push_back(packet);
 		}
@@ -1574,21 +1496,18 @@ bool PacketDelay::build_return_pending_locked()
 		return false;
 	for (const auto *packet : epoch_fronts) {
 		const auto timeline = timeline_key(packet->metadata.stream);
-		last_output_dts_.try_emplace(timeline,
-			TimestampHorizon{0, TimeBase{0, 0}, 0.0L});
-		max_output_pts_.try_emplace(timeline,
-			TimestampHorizon{0, TimeBase{0, 0}, 0.0L});
+		last_output_dts_.try_emplace(timeline, TimestampHorizon{0, TimeBase{0, 0}, 0.0L});
+		max_output_pts_.try_emplace(timeline, TimestampHorizon{0, TimeBase{0, 0}, 0.0L});
 	}
 	for (const auto &packet : pending) {
 		if (!ordering_dts_locked(packet.packet))
 			return false;
 	}
-	std::sort(pending.begin(), pending.end(), [this](const auto &left,
-		const auto &right) {
+	std::sort(pending.begin(), pending.end(), [this](const auto &left, const auto &right) {
 		const auto left_dts = *ordering_dts_locked(left.packet);
 		const auto right_dts = *ordering_dts_locked(right.packet);
-		const int comparison = compare_timestamps(left_dts.value,
-			left_dts.time_base, right_dts.value, right_dts.time_base);
+		const int comparison =
+			compare_timestamps(left_dts.value, left_dts.time_base, right_dts.value, right_dts.time_base);
 		if (comparison != 0)
 			return comparison < 0;
 		return left.sequence < right.sequence;
@@ -1599,8 +1518,7 @@ bool PacketDelay::build_return_pending_locked()
 	std::size_t next_retained = 0;
 	for (auto &packet : pending) {
 		saturating_add(next_packets, std::size_t{1});
-		saturating_add(next_payload,
-			packet.packet.payload.retained_size());
+		saturating_add(next_payload, packet.packet.payload.retained_size());
 		saturating_add(next_retained, packet.retained_bytes);
 		next_return_pending.push_back(std::move(packet));
 	}
@@ -1630,8 +1548,8 @@ double PacketDelay::fill_progress_locked(TimePoint now) const
 		if (queue.empty())
 			return false;
 		const auto age = elapsed(now, queue.front().received_at);
-		progress = std::min(progress, static_cast<double>(age.count()) /
-			static_cast<double>(target_delay_.count()));
+		progress = std::min(progress,
+				    static_cast<double>(age.count()) / static_cast<double>(target_delay_.count()));
 		return true;
 	};
 	if (!required_streams_.empty()) {
@@ -1650,14 +1568,12 @@ double PacketDelay::fill_progress_locked(TimePoint now) const
 	return std::clamp(progress, 0.0, std::nextafter(1.0, 0.0));
 }
 
-bool PacketDelay::stream_is_stalled_locked(const StreamKey &stream,
-	TimePoint now) const noexcept
+bool PacketDelay::stream_is_stalled_locked(const StreamKey &stream, TimePoint now) const noexcept
 {
 	if (config_.stream_stall_timeout.count() == 0)
 		return false;
 	const auto seen = last_stream_seen_.find(stream);
-	return seen != last_stream_seen_.end() &&
-		elapsed(now, seen->second) > config_.stream_stall_timeout;
+	return seen != last_stream_seen_.end() && elapsed(now, seen->second) > config_.stream_stall_timeout;
 }
 
 } // namespace obs_delay::core

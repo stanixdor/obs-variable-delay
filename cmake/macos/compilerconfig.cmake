@@ -5,7 +5,7 @@ include_guard(GLOBAL)
 option(ENABLE_COMPILER_TRACE "Enable clang time-trace" OFF)
 mark_as_advanced(ENABLE_COMPILER_TRACE)
 
-if(NOT XCODE)
+if(NOT XCODE AND NOT OBS_LOCAL_APP_SDK)
   message(FATAL_ERROR "Building OBS Studio on macOS requires Xcode generator.")
 endif()
 
@@ -56,7 +56,9 @@ function(check_sdk_requirements)
   endif()
 endfunction()
 
-check_sdk_requirements()
+if(NOT OBS_LOCAL_APP_SDK)
+  check_sdk_requirements()
+endif()
 
 # Enable dSYM generator for release builds
 string(APPEND CMAKE_C_FLAGS_RELEASE " -g")

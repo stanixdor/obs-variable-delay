@@ -42,7 +42,7 @@ jobs:
               ;;
             push)
               config_data=('codesign:true' 'notarize:false' 'package:true' 'config:RelWithDebInfo')
-              if [[ ${GITHUB_REF_NAME} =~ [0-9]+.[0-9]+.[0-9]+(-(rc|beta).+)? ]]; then
+              if [[ ${GITHUB_REF_NAME} =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(rc|beta)[0-9]+)?$ ]]; then
                 config_data[1]='notarize:true'
                 config_data[3]='config:Release'
               fi
@@ -61,6 +61,18 @@ jobs:
             echo "${key}=${value}" >> $GITHUB_OUTPUT
           done
           echo "commitHash=${GITHUB_SHA:0:9}" >> $GITHUB_OUTPUT
+
+          if [[ "${GITHUB_REF_TYPE}" == 'tag' ]]; then
+            buildspec_version="$(jq -r '.version' buildspec.json)"
+            if [[ ! "${GITHUB_REF_NAME}" =~ ^([0-9]+\.[0-9]+\.[0-9]+)(-(beta|rc)[0-9]+)?$ ]]; then
+              echo "::error::Release tag '${GITHUB_REF_NAME}' is not a supported semantic version."
+              exit 2
+            fi
+            if [[ "${BASH_REMATCH[1]}" != "${buildspec_version}" ]]; then
+              echo "::error::Release tag '${GITHUB_REF_NAME}' does not match buildspec version '${buildspec_version}'."
+              exit 2
+            fi
+          fi
 
           plugin_name="$(grep 'name' buildspec.json | sed -E -e 's/^.+"name":[^"]+"(.+)",?$/\1/g')"
           plugin_display_name="$(grep 'displayName' buildspec.json | sed -E -e 's/^.+"displayName":[^"]+"(.+)",?$/\1/g' || echo "")"
@@ -142,6 +154,18 @@ jobs:
           codesign: ${{ fromJSON(needs.check-event.outputs.codesign) }}
           codesignIdent: ${{ steps.codesign.outputs.codesignIdent }}
 
+      - name: Run Unit Tests 🧪
+        run: |
+          : Run Unit Tests 🧪
+          cmake --build build_macos \
+            --target packet_delay_tests \
+            --config ${{ needs.check-event.outputs.config }} \
+            --parallel
+          ctest \
+            --test-dir build_macos \
+            --build-config ${{ needs.check-event.outputs.config }} \
+            --output-on-failure
+
       - name: Package Plugin 📀
         uses: ./.github/actions/package-plugin
         with:
@@ -174,80 +198,6 @@ jobs:
         with:
           path: ${{ github.workspace }}/.ccache
           key: ${{ runner.os }}-ccache-${{ needs.check-event.outputs.config }}
-
-  ubuntu-build:
-    name: Build for Ubuntu 🐧
-    strategy:
-      matrix:
-        os: [ubuntu-24.04]
-    runs-on: ${{ matrix.os }}
-    needs: check-event
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Set Up Environment 🔧
-        id: setup
-        run: |
-          : Set Up Environment 🔧
-          if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
-
-          read -r product_name product_version <<< \
-            "$(jq -r '. | {name, version} | join(" ")' buildspec.json)"
-
-          echo "pluginName=${product_name}" >> $GITHUB_OUTPUT
-          echo "pluginVersion=${product_version}" >> $GITHUB_OUTPUT
-
-      - uses: actions/cache/restore@v4
-        id: ccache-cache
-        with:
-          path: ${{ github.workspace }}/.ccache
-          key: ${{ runner.os }}-${{ matrix.os }}-ccache-x86_64-${{ needs.check-event.outputs.config }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.os }}-ccache-x86_64-
-
-      - name: Build Plugin 🧱
-        uses: ./.github/actions/build-plugin
-        with:
-          target: x86_64
-          config: ${{ needs.check-event.outputs.config }}
-
-      - name: Package Plugin 📀
-        uses: ./.github/actions/package-plugin
-        with:
-          target: x86_64
-          config: ${{ needs.check-event.outputs.config }}
-          package: ${{ fromJSON(needs.check-event.outputs.package) }}
-
-      - name: Upload Source Tarball 🗜️
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-${{ matrix.os }}-sources-${{ needs.check-event.outputs.commitHash }}
-          path: ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-source.*
-
-      - name: Upload Artifacts 📡
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-${{ matrix.os }}-x86_64-${{ needs.check-event.outputs.commitHash }}
-          path: ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-x86_64*.*
-
-      - name: Upload debug symbol artifacts 🪲
-        uses: actions/upload-artifact@v4
-        if: ${{ fromJSON(needs.check-event.outputs.package) }}
-        with:
-          name: ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-${{ matrix.os }}-x86_64-${{ needs.check-event.outputs.commitHash }}-dbgsym
-          path: ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-x86_64*-dbgsym.ddeb
-
-      - uses: actions/cache/save@v4
-        if: github.event_name != 'pull_request' && steps.ccache-cache.outputs.cache-hit != 'true'
-        with:
-          path: ${{ github.workspace }}/.ccache
-          key: ${{ runner.os }}-${{ matrix.os }}-ccache-x86_64-${{ needs.check-event.outputs.config }}
 
   windows-build:
     name: Build for Windows 🪟
@@ -282,6 +232,17 @@ jobs:
         with:
           target: x64
           config: ${{ needs.check-event.outputs.config }}
+
+      - name: Run Unit Tests 🧪
+        run: |
+          cmake --build build_x64 `
+            --target packet_delay_tests `
+            --config ${{ needs.check-event.outputs.config }} `
+            --parallel
+          ctest `
+            --test-dir build_x64 `
+            --build-config ${{ needs.check-event.outputs.config }} `
+            --output-on-failure
 
       - name: Package Plugin 📀
         uses: ./.github/actions/package-plugin
