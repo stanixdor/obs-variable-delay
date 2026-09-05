@@ -1,10 +1,19 @@
 {
   "Metadata": {
     "productName": "OBS Dynamic Delay",
-    "title": "Delay variable para directos y grabaciones de OBS",
-    "description": "Añade, cancela, cambia o quita delay mientras OBS sigue emitiendo o grabando. Nativo, eficiente y de código abierto.",
+    "title": "Delay variable y emisión multi-RTMP para OBS",
+    "description": "Añade o quita delay en directos y grabaciones de OBS sin reiniciar. Envía un mismo programa con delay a varios destinos RTMP/RTMPS con multistream nativo.",
     "ogAlt": "OBS Dynamic Delay — delay variable sin detener la salida",
-    "keywords": ["plugin de OBS", "delay para directos", "delay para grabaciones", "delay variable", "OBS Studio", "streaming"]
+    "keywords": [
+      "plugin OBS",
+      "delay directo",
+      "delay grabación",
+      "delay variable",
+      "OBS Studio",
+      "multi RTMP",
+      "multistream con delay",
+      "emisión RTMPS"
+    ]
   },
   "Landing": {
     "brand": "OBS Dynamic Delay",
@@ -18,7 +27,7 @@
     "eyebrow": "Plugin nativo para OBS · v{version}",
     "headlineTop": "Controla el delay.",
     "headlineBottom": "No pares el directo.",
-    "intro": "Añade hasta 300 segundos de delay —o vuelve al directo— sin reiniciar la emisión ni la grabación.",
+    "intro": "Añade hasta 300 segundos de delay sin reiniciar. Ahora envía el mismo programa con delay a varios destinos RTMP/RTMPS desde un único plugin nativo.",
     "download": "Descargar última versión",
     "viewSource": "Ver código",
     "platforms": "macOS · Windows · Linux",
@@ -47,26 +56,56 @@
     "proofLabel": "Resumen del producto",
     "featuresKicker": "Pensado para directos reales",
     "featuresTitle": "El control que le faltaba a OBS.",
-    "featuresIntro": "Un panel nativo que funciona entre escenas mientras la salida comprimida sigue avanzando.",
+    "featuresIntro": "Delay variable, audio en la escena de espera y multistream integrado, mientras cambias de escena y utilizas OBS con normalidad.",
     "features": [
-      {"title": "Cambia el delay en directo", "description": "Añade, cancela, rearma o quita entre 1 y 300 segundos sin detener la emisión ni la grabación."},
-      {"title": "Audio en la escena de espera", "description": "Un mix privado mantiene audible la escena elegida sin reescribir los buses globales."},
-      {"title": "Vista de audiencia", "description": "Una vista de 320×180 reducida en GPU sigue los frames emitidos sin bloquear los ajustes de vídeo de OBS."},
-      {"title": "Estimación honesta de memoria", "description": "El panel calcula la RAM usando el bitrate medido y muestra el consumo real al crecer el buffer."},
-      {"title": "Uso normal de OBS", "description": "Cambia escenas, usa el Modo Estudio y sigue controlando OBS con el delay activo."},
-      {"title": "Cambios seguros de señal", "description": "Los empalmes ocurren en keyframes seguros para conservar un bitstream A/V decodificable."}
+      {
+        "title": "Cambia el delay en directo",
+        "description": "Añade, cancela, rearma o quita entre 1 y 300 segundos sin detener la emisión ni la grabación."
+      },
+      {
+        "title": "Audio en la escena de espera",
+        "description": "Un mix privado mantiene audible la escena elegida sin reescribir los buses globales."
+      },
+      {
+        "title": "Vista de audiencia",
+        "description": "Una vista de 320×180 reducida en GPU sigue los frames emitidos sin bloquear los ajustes de vídeo de OBS."
+      },
+      {
+        "title": "Estimación honesta de memoria",
+        "description": "El panel calcula la RAM usando el bitrate medido y muestra el consumo real al crecer el buffer."
+      },
+      {
+        "title": "Uso normal de OBS",
+        "description": "Cambia escenas, usa el Modo Estudio y sigue controlando OBS con el delay activo."
+      },
+      {
+        "title": "Cambios seguros de señal",
+        "description": "Los empalmes ocurren en keyframes seguros para conservar un bitstream A/V decodificable."
+      }
     ],
     "workflowKicker": "Qué ocurre en el directo",
     "workflowTitle": "Tres estados. Una salida sin interrupciones.",
     "workflowIntro": "El plugin cambia lo que recibe el output, no tu manera de operar la producción.",
     "workflow": [
-      {"number": "01", "title": "Preparar", "description": "Elige delay y escena de espera. El programa sigue en directo mientras se preparan encoders auxiliares compatibles."},
-      {"number": "02", "title": "Llenar", "description": "En un keyframe seguro, la audiencia ve la escena de espera mientras el programa comprimido llena el buffer."},
-      {"number": "03", "title": "Delay o vuelta al directo", "description": "El programa almacenado toma el control al alcanzar el tiempo elegido. Quita el delay cuando quieras; sin reiniciar."}
+      {
+        "number": "01",
+        "title": "Preparar",
+        "description": "Elige delay y escena de espera. El programa sigue en directo mientras se preparan encoders auxiliares compatibles."
+      },
+      {
+        "number": "02",
+        "title": "Llenar",
+        "description": "En un keyframe seguro, la audiencia ve la escena de espera mientras el programa comprimido llena el buffer."
+      },
+      {
+        "number": "03",
+        "title": "Delay o vuelta al directo",
+        "description": "El programa almacenado toma el control al alcanzar el tiempo elegido. Quita el delay cuando quieras; sin reiniciar."
+      }
     ],
     "performanceKicker": "Hecho para equipos competitivos",
     "performanceTitle": "Consume RAM, no GPU permanentemente.",
-    "performanceBody": "El vídeo permanece comprimido en RAM. Cuando emisión y grabación usan los mismos encoders, comparten el sistema temporal de espera. La vista se reduce en GPU antes de copiarse a RAM; pliégala para liberar la captura y el historial.",
+    "performanceBody": "El vídeo permanece comprimido en RAM. Los destinos del multistream comparten un búfer de delay y los datos de los paquetes, con colas de red limitadas por destino. Las salidas compatibles comparten la codificación temporal de espera. Cierra la vista de audiencia para liberar su captura e historial.",
     "performancePoints": [
       "Sin un bucle permanente de decodificación, composición y recodificación",
       "Puente PCM acotado y sin locks; sin reservar PCM en modo Silencio",
@@ -81,7 +120,7 @@
     "performanceMetricThreeLabel": "Vista cuando está abierta",
     "downloadKicker": "Última versión estable",
     "downloadTitle": "Listo para tu equipo con OBS.",
-    "downloadIntro": "La versión {version} incorpora correcciones de estabilidad, gestión de pausas de grabación y una vista más eficiente. Para OBS Studio 32.2.x; elige tu plataforma y sigue la guía de instalación incluida.",
+    "downloadIntro": "La versión {version} añade emisión multi-RTMP integrada con un delay variable compartido y controles independientes por destino. Para OBS Studio 32.2.x; elige tu plataforma y sigue la guía de instalación.",
     "recommended": "Recomendado",
     "downloadFor": "Descargar para {platform}",
     "platformMac": "macOS",
@@ -109,10 +148,21 @@
     "ctaBody": "Descarga la versión estable o revisa cada línea del código GPL-2.0 en GitHub.",
     "ctaDownload": "Descargar v{version}",
     "ctaSource": "Explorar el repositorio",
-    "footerDescription": "Delay variable para directos y grabaciones de OBS sin reiniciar el output.",
+    "footerDescription": "Delay variable para directos y grabaciones de OBS, con emisión multi-RTMP integrada.",
     "footerGuide": "Documentación",
     "footerRelease": "Última versión",
     "footerLicense": "GPL-2.0-or-later",
-    "footerBuilt": "Creado para quienes no pueden pausar la acción."
+    "footerBuilt": "Creado para quienes no pueden pausar la acción.",
+    "multistreamKicker": "Nuevo en 1.2 · Multi-RTMP integrado",
+    "multistreamTitle": "Un programa con delay. Varios destinos.",
+    "multistreamBody": "Pon nombre a tus destinos, introduce el servidor y la clave de cada uno, e inícialos o páralos por separado. Todos los destinos de este panel reciben el mismo vídeo y audio codificado después del delay compartido.",
+    "multistreamPoints": [
+      "Hasta 8 destinos RTMP/RTMPS; no hace falta iniciar el directo nativo de OBS",
+      "Un búfer de delay compartido; sin otra codificación por destino",
+      "Colas de envío limitadas y reconexiones independientes",
+      "Claves ocultas por defecto; nada se inicia automáticamente"
+    ],
+    "multistreamLimits": "H.264 + AAC · SDR · La misma resolución, FPS, bitrate y pista de audio en todos los destinos. No retrasa canvases independientes de Aitum ni escenas de Branch Output.",
+    "multistreamCost": "El ancho de banda de subida aumenta con cada destino. El directo nativo de OBS y la grabación conservan sus propias sesiones de delay; combinarlos con el multistream autónomo puede usar codificadores adicionales."
   }
 }

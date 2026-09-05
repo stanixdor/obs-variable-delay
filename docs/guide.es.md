@@ -2,18 +2,18 @@
 
 Plugin nativo para OBS Studio que permite **añadir, cancelar, cambiar o quitar delay sin detener la emisión ni la grabación**. Trabaja sobre los paquetes ya comprimidos que OBS entrega al output, por lo que el coste estable es principalmente RAM y no una segunda codificación permanente.
 
-Versión: `1.1.2`<br>
+Versión: `1.2.0`<br>
 Compatibilidad de referencia: OBS Studio `32.2.x`, Qt 6, macOS 13+, Windows 10/11 x64 y Ubuntu 24.04 x86_64.
 
-La versión 1.1.2 corrige bloqueos al cancelar/rearmar, el progreso durante las pausas de grabación, el reinicio de
-timestamps tras reconectar y la desincronización A/V persistente tras huecos del encoder en **macOS, Windows y
-Linux**. Reduce además las lecturas de GPU y el trabajo de encoders auxiliares compatibles, sin añadir una
-recodificación permanente de Program. Descarga los
-[artefactos y checksums oficiales 1.1.2](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.2).
+La versión 1.2.0 añade un panel de multistream integrado y autónomo en **macOS, Windows y Linux**. Hasta ocho
+destinos RTMP/RTMPS comparten un stream Program con delay sin necesitar que el directo nativo de OBS esté activo.
+Se mantienen los controles de delay y las correcciones de funcionamiento y rendimiento de 1.1.2. Descarga los
+[artefactos y checksums oficiales 1.2.0](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.2.0).
 
 ## Qué hace
 
 - Controla streaming y grabación activos de forma independiente, también cuando funcionan a la vez.
+- Envía un stream con delay compartido a hasta ocho destinos RTMP/RTMPS que se inician y detienen por separado.
 - Permite elegir de 1 a 300 segundos con slider y campo numérico.
 - Activa, cancela o elimina el delay sin reiniciar el output.
 - Mantiene el uso normal de OBS: se pueden cambiar escenas y operar Studio con el delay activo.
@@ -47,6 +47,61 @@ de audio activas y el vídeo en un GOP completo del buffer. Esta recuperación p
 decodifica/recodifica Program, no empalma en P/B-frames dependientes ni muestra otra escena de espera. El slider
 configurado y el frame realmente emitido son distintos: la preview sigue el timestamp de captura emitido, no un
 valor del slider que todavía no se ha aplicado.
+
+## Multistream integrado
+
+Abre **Paneles/Docks → Delay dinámico — Multistream**. Este panel gestiona los destinos; los segundos de delay,
+la escena de espera, su audio y la vuelta a live siguen controlándose desde **Delay dinámico**.
+
+1. Configura la salida de streaming de OBS con **vídeo H.264 y audio AAC**. Usa el canvas principal de Program,
+   SDR NV12/I420 y audio mono o estéreo. La pista principal de audio de streaming seleccionada en OBS será la
+   pista de audio compartida.
+2. Selecciona **Añadir destino** e introduce un nombre, un servidor como `rtmps://example.com/live` y la clave de
+   emisión. Incluye los parámetros de consulta que facilite el servicio en la clave, no en la dirección del
+   servidor. Se rechazan datos de usuario, espacios, consultas y fragmentos en el servidor. La clave se oculta
+   salvo que marques expresamente **Mostrar clave de emisión**.
+3. Guarda y pulsa **Iniciar** en cada destino que quieras usar. Guardar no publica nada y los destinos guardados
+   nunca arrancan automáticamente al abrir OBS. Se pueden guardar hasta ocho.
+4. Usa **Add delay** o **Remove delay / cancel** en Delay dinámico. Todos los destinos multistream del plugin
+   reciben el mismo stream maestro con delay; no tienen buffers de delay independientes.
+5. Detén un destino antes de editarlo o eliminarlo. El borrado pide confirmación. Detener uno no detiene los demás
+   destinos ni los outputs nativos de streaming/grabación de OBS.
+
+El panel indica conectando, esperando keyframe, en directo, reconectando, detenido y error. Un destino nuevo o
+reconectado espera un keyframe seguro del stream compartido actual; no reproduce todo el historial de delay ni
+inserta otra espera para los demás. Un servidor lento puede retrasarse o reconectar de forma independiente: que
+el contenido codificado sea idéntico no implica que llegue a la vez ni que los reproductores tengan igual latencia.
+
+### Codificación, subida y alcance
+
+Al iniciar el primer destino, se reutilizan los encoders de un **stream nativo de OBS compatible ya activo**.
+En caso contrario, una pareja privada de encoders usa los ajustes de streaming configurados en OBS. Todos los
+destinos del plugin comparten esa pareja y **un** buffer de delay. Iniciar después el streaming nativo puede
+añadir trabajo de codificación; el plugin no sustituye al gestor de outputs de OBS ni trasplanta encoders activos.
+
+El streaming y la grabación nativos conservan sus propias sesiones de delay. El maestro multistream integrado es
+otra sesión gestionada por los mismos controles de delay. No se modifican plugins de terceros ni sus hooks de
+output. Multistream no ofrece distintos bitrates, mezclas de audio, resoluciones o canvases por destino. Admite
+una pista de vídeo H.264 y una de audio AAC, no HEVC, AV1, Opus, HDR/10-bit, surround, Enhanced Broadcasting ni
+canvases independientes. Detén todos los destinos antes de cambiar la configuración de codificación de origen.
+
+Cada destino añade otra copia en la red: con un total de 8 Mbit/s, tres destinos necesitan unos 24 Mbit/s de subida
+más el overhead del protocolo. Los payloads comprimidos se comparten en memoria entre colas de destino acotadas;
+cada destino sigue teniendo costes de socket, multiplexado y cola. Añadir uno no crea otro encoder Program ni
+otro buffer completo de delay. Preparing/Filling sigue necesitando el encoder temporal de espera descrito abajo.
+
+### Credenciales y transporte
+
+Nombres, URLs y claves se guardan en `multistream.json`, dentro de la configuración local del plugin en OBS, con
+permisos de lectura/escritura sólo para el propietario. **No es cifrado ni un almacén de credenciales del sistema.**
+Otro software ejecutado con tu cuenta puede leerlo. No publiques el archivo, no lo incluyas en copias públicas ni
+compartas capturas con la clave visible. La lista muestra sólo el host del servidor, no rutas de URL que puedan
+contener información sensible.
+
+RTMPS verifica los certificados y nombres de servidor mediante el transporte librtmp privado derivado de OBS.
+FFmpeg se usa para multiplexar FLV, no como encoder adicional ni transporte de red. RTMP no está cifrado; usa RTMPS
+si tu proveedor lo admite. El plugin no registra claves ni errores de red crudos que puedan contener credenciales.
+Al pedir ayuda, elimina los datos de destinos de cualquier log externo de OBS o del proveedor que adjuntes.
 
 ## Audio de la escena de espera
 
@@ -89,7 +144,7 @@ Para configurar **Reserved OBS track**:
 
 Usa el ZIP universal como descarga recomendada. Su bundle tiene firma *ad hoc*. El PKG universal alternativo no
 tiene firma Developer ID ni está notarizado por Apple; macOS puede pedir autorización explícita. Comprueba la
-descarga con [SHA256SUMS.txt](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/SHA256SUMS.txt).
+descarga con [SHA256SUMS.txt](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/SHA256SUMS.txt).
 
 ### Windows x64
 
@@ -137,13 +192,13 @@ el PPA oficial de OBS es una opción, pero comprueba la versión que ofrece ante
 ```bash
 sudo add-apt-repository ppa:obsproject/obs-studio
 sudo apt update
-sudo apt install ./obs-dynamic-delay-1.1.2-x86_64-linux-gnu.deb
+sudo apt install ./obs-dynamic-delay-1.2.0-x86_64-linux-gnu.deb
 ```
 
 Como archivo alternativo, el `tar.xz` contiene el layout estándar `lib/share` para `/usr`:
 
 ```bash
-sudo tar -xJf obs-dynamic-delay-1.1.2-x86_64-ubuntu-gnu.tar.xz -C /usr
+sudo tar -xJf obs-dynamic-delay-1.2.0-x86_64-ubuntu-gnu.tar.xz -C /usr
 ```
 
 Reinicia OBS y activa **Docks → Dynamic Delay**. Estos dos artefactos están construidos para OBS nativo en
@@ -185,7 +240,7 @@ frecuencia para reabrirlo, pero detiene el repintado. Durante una pausa de graba
 el historial necesario para reanudar. Si coexisten streaming y grabación, la preview sigue el streaming; en caso
 contrario sigue la grabación. No incluye la latencia del servidor, CDN ni reproductor.
 
-## Limitaciones deliberadas de la versión 1.1.2
+## Limitaciones deliberadas de la versión 1.2.0
 
 - **Transición:** el modo de producción es `Cut on keyframe`. La opción de fade aparece deshabilitada porque un crossfade real entre vídeo ya retrasado y vídeo vivo exige decodificar, componer y volver a codificar toda la señal. Eso contradice el objetivo de bajo consumo y puede degradar imagen y latencia.
 - **Empalme de audio:** el cambio entre el encoder principal y el auxiliar puede introducir un hueco muy breve de
@@ -241,6 +296,11 @@ APIs de OBS usadas como contrato:
 
 El proyecto parte del sistema oficial `obs-plugintemplate`; descarga y fija por hash las fuentes de OBS 32.2.2, `obs-deps` y Qt 6.11.1 definidos en `buildspec.json`.
 
+Multistream enlaza las bibliotecas `avformat`, `avcodec` y `avutil` de FFmpeg para multiplexar FLV, además de mbedTLS
+y zlib para el transporte librtmp privado derivado de OBS. macOS/Windows usan el bundle de dependencias de OBS, sin
+distribuir otro runtime de FFmpeg ni Qt. Linux necesita `libavformat-dev`, `libavcodec-dev`, `libavutil-dev`,
+`libmbedtls-dev` y `zlib1g-dev`, además de las dependencias siguientes. Consulta los avisos upstream en `vendor/`.
+
 ### macOS arm64 local
 
 Requiere OBS 32.2.2 instalado en `/Applications/OBS.app`, Xcode Command Line Tools, CMake y Ninja:
@@ -289,9 +349,16 @@ símbolos de depuración, archivo de fuentes y `SHA256SUMS.txt`. El tag debe coi
 `buildspec.json`; se permiten sufijos de prerelease
 como `-beta2` o `-rc1`.
 
-## Validación de 1.1.2
+## Validación de 1.2.0
 
-Cinco suites sin SDK pasan en macOS con warnings como errores, ASan+UBSan y TSan:
+La validación de la release está en curso. Los resultados de los binarios, la UI, el transporte, las pruebas
+loopback con libobs real y los paquetes multiplataforma se registrarán en las
+[notas 1.2.0](releases/1.2.0.md#validación). La integración multistream usa únicamente destinos loopback; no publica
+en canales reales.
+
+### Cobertura histórica del delay (1.1.2)
+
+Las cinco suites sin SDK del delay pasaron para 1.1.2 en macOS con warnings como errores, ASan+UBSan y TSan:
 
 - **Casos de OutputSession de producción:** callbacks reales, referencias de paquetes, limpieza al
   cancelar/rearmar, llenado según reloj de medios al pausar, reconexión con audio/vídeo primero, timestamps de
@@ -314,10 +381,10 @@ ctest --test-dir build-tests --output-on-failure
 Los targets opcionales de integración `preview_gpu_integration` y `output_session_integration` usan libobs real y
 un backend gráfico. Se habilitan con `-DENABLE_OBS_INTEGRATION_TESTS=ON` al compilar con el SDK de OBS; son
 independientes de las cinco suites sin SDK y esos comandos CTest no los ejecutan automáticamente. Sus resultados
-runtime nativos deben comunicarse por separado; consulta la [validación de la release](releases/1.1.2.md#validación).
+runtime nativos deben comunicarse por separado; consulta la [validación histórica 1.1.2](releases/1.1.2.md#validación).
 
 La grabación de 174,002 segundos y las pruebas de arranque Linux con Docker/Xvfb/llvmpipe corresponden a **1.1.1**,
-no a 1.1.2. Sus resultados históricos y limitaciones siguen en las
+no a 1.2.0. Sus resultados históricos y limitaciones siguen en las
 [notas de la versión 1.1.1](releases/1.1.1.md#validación).
 
 ## Licencia

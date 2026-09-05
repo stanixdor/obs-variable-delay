@@ -1,10 +1,19 @@
 {
   "Metadata": {
     "productName": "OBS Dynamic Delay",
-    "title": "Variable stream and recording delay for OBS",
-    "description": "Add, cancel, change or remove delay while OBS keeps streaming or recording. Native, efficient and open source.",
+    "title": "Variable delay & multi-RTMP streaming for OBS",
+    "description": "Add or remove OBS stream and recording delay without restarting. Send one delayed program to multiple RTMP/RTMPS destinations with native multistream.",
     "ogAlt": "OBS Dynamic Delay — variable delay without stopping your output",
-    "keywords": ["OBS plugin", "stream delay", "recording delay", "variable delay", "OBS Studio", "live streaming"]
+    "keywords": [
+      "OBS plugin",
+      "stream delay",
+      "recording delay",
+      "variable delay",
+      "OBS Studio",
+      "multi RTMP",
+      "multistream with delay",
+      "RTMPS streaming"
+    ]
   },
   "Landing": {
     "brand": "OBS Dynamic Delay",
@@ -18,7 +27,7 @@
     "eyebrow": "Native OBS plugin · v{version}",
     "headlineTop": "Control the delay.",
     "headlineBottom": "Never stop the stream.",
-    "intro": "Add up to 300 seconds of delay—or return to live—without restarting your stream or recording.",
+    "intro": "Add up to 300 seconds of delay without restarting. Now send the same delayed program to multiple RTMP/RTMPS destinations from one native plugin.",
     "download": "Download latest",
     "viewSource": "View source",
     "platforms": "macOS · Windows · Linux",
@@ -47,26 +56,56 @@
     "proofLabel": "Product summary",
     "featuresKicker": "Designed for real broadcasts",
     "featuresTitle": "The control OBS was missing.",
-    "featuresIntro": "A native dock that works across scenes while the compressed output keeps flowing.",
+    "featuresIntro": "Variable delay, hold-scene audio and built-in multistream—across your normal OBS scene changes.",
     "features": [
-      {"title": "Change delay live", "description": "Add, cancel, re-arm or remove 1–300 seconds without stopping streaming or recording."},
-      {"title": "Audio during the hold scene", "description": "A private audio mix keeps the selected hold scene audible without rewriting global buses."},
-      {"title": "Audience preview", "description": "A GPU-downscaled 320×180 preview follows emitted frames without locking OBS video settings."},
-      {"title": "Honest memory estimate", "description": "The dock estimates RAM from measured bitrate and shows real usage as the buffer grows."},
-      {"title": "Normal OBS workflow", "description": "Switch scenes, use Studio Mode and keep operating OBS normally while delay is active."},
-      {"title": "Safe output switching", "description": "Transitions happen on codec-safe keyframes to preserve a decodable A/V bitstream."}
+      {
+        "title": "Change delay live",
+        "description": "Add, cancel, re-arm or remove 1–300 seconds without stopping streaming or recording."
+      },
+      {
+        "title": "Audio during the hold scene",
+        "description": "A private audio mix keeps the selected hold scene audible without rewriting global buses."
+      },
+      {
+        "title": "Audience preview",
+        "description": "A GPU-downscaled 320×180 preview follows emitted frames without locking OBS video settings."
+      },
+      {
+        "title": "Honest memory estimate",
+        "description": "The dock estimates RAM from measured bitrate and shows real usage as the buffer grows."
+      },
+      {
+        "title": "Normal OBS workflow",
+        "description": "Switch scenes, use Studio Mode and keep operating OBS normally while delay is active."
+      },
+      {
+        "title": "Safe output switching",
+        "description": "Transitions happen on codec-safe keyframes to preserve a decodable A/V bitstream."
+      }
     ],
     "workflowKicker": "What happens on air",
     "workflowTitle": "Three states. One uninterrupted output.",
     "workflowIntro": "The plugin changes what the output receives—not how you operate your production.",
     "workflow": [
-      {"number": "01", "title": "Prepare", "description": "Choose the delay and hold scene. The live program continues while compatible auxiliary encoders get ready."},
-      {"number": "02", "title": "Fill", "description": "At a safe keyframe, viewers see the hold scene while compressed program packets fill the buffer."},
-      {"number": "03", "title": "Delay—or return live", "description": "The buffered program takes over at the target depth. Remove delay whenever you want; no output restart."}
+      {
+        "number": "01",
+        "title": "Prepare",
+        "description": "Choose the delay and hold scene. The live program continues while compatible auxiliary encoders get ready."
+      },
+      {
+        "number": "02",
+        "title": "Fill",
+        "description": "At a safe keyframe, viewers see the hold scene while compressed program packets fill the buffer."
+      },
+      {
+        "number": "03",
+        "title": "Delay—or return live",
+        "description": "The buffered program takes over at the target depth. Remove delay whenever you want; no output restart."
+      }
     ],
     "performanceKicker": "Built for competitive rigs",
     "performanceTitle": "Spend RAM, not permanent GPU time.",
-    "performanceBody": "Video stays compressed in RAM. Matching stream and recording encoders share the same temporary hold pipeline. Preview frames are reduced on the GPU before readback; collapse the preview to release its capture and history.",
+    "performanceBody": "Video stays compressed in RAM. Multistream destinations share one delay buffer and immutable packet payloads, with bounded network queues per destination. Compatible outputs share the temporary hold pipeline. Collapse the audience preview to release its capture and history.",
     "performancePoints": [
       "No permanent decode / composite / re-encode loop",
       "Bounded lock-free PCM bridge; no PCM allocation in Silence mode",
@@ -81,7 +120,7 @@
     "performanceMetricThreeLabel": "Preview when open",
     "downloadKicker": "Latest stable release",
     "downloadTitle": "Ready for your OBS machine.",
-    "downloadIntro": "Version {version} includes stability fixes, recording-pause handling and a more efficient preview. For OBS Studio 32.2.x; choose your platform and follow the included installation guide.",
+    "downloadIntro": "Version {version} adds built-in multi-RTMP streaming with a shared variable delay and independent destination controls. For OBS Studio 32.2.x; choose your platform and follow the installation guide.",
     "recommended": "Recommended",
     "downloadFor": "Download for {platform}",
     "platformMac": "macOS",
@@ -109,10 +148,21 @@
     "ctaBody": "Download the stable build or inspect every line of the GPL-2.0 source on GitHub.",
     "ctaDownload": "Get v{version}",
     "ctaSource": "Explore the repository",
-    "footerDescription": "Variable delay for OBS streams and recordings, without restarting the output.",
+    "footerDescription": "Variable delay for OBS streams and recordings, plus built-in multi-RTMP streaming.",
     "footerGuide": "Documentation",
     "footerRelease": "Latest release",
     "footerLicense": "GPL-2.0-or-later",
-    "footerBuilt": "Built for creators who cannot pause the action."
+    "footerBuilt": "Built for creators who cannot pause the action.",
+    "multistreamKicker": "New in 1.2 · Built-in multi-RTMP",
+    "multistreamTitle": "One delayed program. Multiple destinations.",
+    "multistreamBody": "Name your destinations, enter each server and stream key, and start or stop them independently. Every destination in this dock receives the same encoded video and audio after the shared delay.",
+    "multistreamPoints": [
+      "Up to 8 RTMP/RTMPS destinations; no native OBS stream required",
+      "One shared delay buffer; no additional encode per destination",
+      "Separate bounded send queues and independent reconnects",
+      "Keys hidden by default; nothing starts automatically"
+    ],
+    "multistreamLimits": "H.264 + AAC · SDR · Same resolution, FPS, bitrate and audio track for every destination. This does not delay separate Aitum canvases or Branch Output scenes.",
+    "multistreamCost": "Upload bandwidth grows with each destination. The native OBS stream and recording keep their own delay sessions; running them alongside standalone multistream may use additional encoders."
   }
 }

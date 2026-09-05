@@ -57,6 +57,7 @@ async function Landing({locale}: LandingProps) {
   const workflow = t.raw("workflow") as WorkflowStep[];
   const performancePoints = t.raw("performancePoints") as string[];
   const requirements = t.raw("requirements") as string[];
+  const multistreamPoints = t.raw("multistreamPoints") as string[];
   const guideUrl = `${repositoryUrl}/blob/main/docs/guide.${locale}.md`;
   const platformDownloads = [
     {
@@ -278,6 +279,28 @@ async function Landing({locale}: LandingProps) {
               </article>
             );
           })}
+        </div>
+      </section>
+
+      <section className="sectionShell multistreamSection" id="multistream" aria-labelledby="multistream-title">
+        <div className="sectionHeading sectionHeadingWide">
+          <p className="sectionKicker">{t("multistreamKicker")}</p>
+          <h2 id="multistream-title">{t("multistreamTitle")}</h2>
+          <p>{t("multistreamBody")}</p>
+        </div>
+        <div className="compatibilityGrid">
+          <div className="compatibilityCard">
+            <ul className="checkList">
+              {multistreamPoints.map((point) => (
+                <li key={point}><Check size={16} aria-hidden="true" /><span>{point}</span></li>
+              ))}
+            </ul>
+          </div>
+          <div className="transparencyCard">
+            <span className="transparencyIcon" aria-hidden="true"><Radio size={22} /></span>
+            <p>{t("multistreamLimits")}</p>
+            <p>{t("multistreamCost")}</p>
+          </div>
         </div>
       </section>
 

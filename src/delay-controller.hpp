@@ -48,6 +48,10 @@ public:
 	[[nodiscard]] std::vector<AudioSourceChoice> audio_sources() const;
 	[[nodiscard]] QString audio_preflight() const;
 	[[nodiscard]] bool requested_active() const noexcept { return requestedActive_; }
+	// Explicitly owned outputs only; never enumerate or alter third-party routes.
+	bool add_managed_output(obs_output_t *output, std::string &error);
+	void managed_output_started(obs_output_t *output);
+	void remove_managed_output(obs_output_t *output);
 
 public slots:
 	void toggle_delay();
@@ -60,6 +64,7 @@ public slots:
 	void set_preview_expanded(bool expanded);
 
 signals:
+	void about_to_shutdown();
 	void snapshot_changed(const dynamic_delay::DelaySnapshot &snapshot);
 	void settings_changed(const dynamic_delay::DelaySettings &settings);
 	void scenes_changed(const std::vector<dynamic_delay::SceneChoice> &scenes);

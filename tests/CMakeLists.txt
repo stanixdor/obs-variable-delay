@@ -21,6 +21,11 @@ target_link_libraries(packet_delay_tests PRIVATE Threads::Threads)
 enable_testing()
 add_test(NAME packet_delay_tests COMMAND packet_delay_tests)
 
+add_executable(multistream_transport_tests multistream_transport_tests.cpp)
+target_include_directories(multistream_transport_tests PRIVATE ../src)
+target_compile_features(multistream_transport_tests PRIVATE cxx_std_20)
+add_test(NAME multistream_transport_tests COMMAND multistream_transport_tests)
+
 add_executable(audio_spsc_fifo_tests audio_spsc_fifo_tests.cpp)
 target_include_directories(audio_spsc_fifo_tests PRIVATE ../src)
 target_compile_features(audio_spsc_fifo_tests PRIVATE cxx_std_20)

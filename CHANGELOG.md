@@ -14,6 +14,33 @@ Este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/) y la es
 
 No additional changes listed.
 
+### [1.2.0] — 2026-09-05
+
+[Release page and downloads](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.2.0) ·
+[Full release notes](docs/releases/1.2.0.md)
+
+#### Added
+
+- Integrated multistream dock for up to eight named RTMP/RTMPS destinations, with hidden keys, explicit per-target
+  start/stop, editable saved configuration, and safe status messages. Saved destinations never start automatically.
+- Autonomous Program output: all plugin destinations share one H.264/AAC stream and one delay buffer, without
+  needing the native OBS stream to be running. Native streaming/recording retain independent delay sessions.
+- Reuse of compatible already-active native streaming encoders, otherwise one private configured encoder pair
+  for all plugin destinations. Adding destinations does not add encoders or full delay buffers; native streaming
+  started later may need additional encoding.
+- Bounded independent destination queues, safe-keyframe joining/reconnection, and RTMP/RTMPS delivery through a
+  private OBS-derived librtmp transport with TLS verification. FFmpeg is used only for FLV muxing.
+- Local destination persistence in owner-only `multistream.json`, without encryption or key logging. English and
+  Spanish setup, security, bandwidth, scope, and download documentation.
+
+#### Scope and validation
+
+- Multistream targets main Program, SDR NV12/I420, H.264/AAC, and mono/stereo. No per-target bitrate, audio mix,
+  resolution, canvas, HDR, HEVC, AV1, Opus, or Enhanced Broadcasting; third-party output plugins are untouched.
+- Existing delay behavior and the 1.1.2 correctness/performance fixes are retained.
+- Final 1.2.0 builds, regression/sanitizer results, packages, and real-libobs loopback integration are pending.
+  Historical runtime validation below is not attributed to the new release. No real channels are used by tests.
+
 ### [1.1.2] — 2026-09-05
 
 [Release page and downloads](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.2) ·
@@ -117,6 +144,33 @@ No additional changes listed.
 
 No hay cambios adicionales enumerados.
 
+### [1.2.0] — 2026-09-05
+
+[Página de la versión y descargas](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.2.0) ·
+[Notas completas](docs/releases/1.2.0.md)
+
+#### Añadido
+
+- Panel multistream integrado para hasta ocho destinos RTMP/RTMPS con nombre, claves ocultas, inicio/parada
+  explícitos por destino, configuración guardada editable y estados seguros. Nunca arrancan automáticamente.
+- Output Program autónomo: todos los destinos del plugin comparten un stream H.264/AAC y un buffer de delay, sin
+  necesitar el directo nativo de OBS. Streaming y grabación nativos conservan sesiones de delay independientes.
+- Reutilización de encoders de streaming nativos compatibles ya activos o, en su defecto, una pareja privada
+  configurada para todos los destinos del plugin. Añadir destinos no añade encoders ni buffers completos; iniciar
+  después el streaming nativo puede requerir codificación adicional.
+- Colas independientes acotadas, entrada/reconexión en keyframes seguros y envío RTMP/RTMPS mediante un transporte
+  librtmp privado derivado de OBS con verificación TLS. FFmpeg se usa sólo para multiplexar FLV.
+- Persistencia local en `multistream.json` con permisos sólo para el propietario, sin cifrado ni logs de claves.
+  Documentación en inglés/español de configuración, seguridad, subida, alcance y descargas.
+
+#### Alcance y validación
+
+- Multistream usa Program principal, SDR NV12/I420, H.264/AAC y mono/estéreo. No ofrece bitrate, mezcla, resolución
+  ni canvas por destino, HDR, HEVC, AV1, Opus o Enhanced Broadcasting; no se modifican outputs de otros plugins.
+- Se conservan el comportamiento del delay y las correcciones de funcionamiento/rendimiento de 1.1.2.
+- Están pendientes los builds finales 1.2.0, regresiones/sanitizers, paquetes e integración loopback con libobs
+  real. La validación runtime histórica siguiente no se atribuye a la nueva release. No se usan canales reales.
+
 ### [1.1.2] — 2026-09-05
 
 [Página de la versión y descargas](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.2) ·
@@ -218,4 +272,6 @@ No hay cambios adicionales enumerados.
   de Windows no tiene firma Authenticode.
 
 [1.1.1]: https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.1
+[1.1.2]: https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.2
+[1.2.0]: https://github.com/stanixdor/obs-variable-delay/releases/tag/1.2.0
 [1.1.2]: https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.2

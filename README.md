@@ -23,7 +23,7 @@ OBS Dynamic Delay is a native OBS Studio plugin for introducing a variable delay
 recording output. It buffers the encoded packets that OBS already produces, so an active delay primarily costs RAM
 instead of requiring permanent decoding and re-encoding.
 
-Version **1.1.2** supports OBS Studio 32.2.x and Qt 6 on macOS 13+, Windows 10/11 x64, and native Ubuntu 24.04
+Version **1.2.0** supports OBS Studio 32.2.x and Qt 6 on macOS 13+, Windows 10/11 x64, and native Ubuntu 24.04
 x86_64.
 
 ### Highlights
@@ -36,22 +36,39 @@ x86_64.
 - Estimate RAM from the observed or configured bitrate.
 - Open an optional low-cost audience preview only when needed.
 - Control simultaneous streaming and recording outputs independently.
+- Send one shared delayed stream to up to eight RTMP/RTMPS destinations from the integrated Multistream dock.
 - Support normal single-video-track Hybrid MP4/MOV, RTMP, and FLV outputs in OBS 32.
 
-Version 1.1.2 fixes rapid cancel/rearm hangs, paused-buffer progress, reconnect timestamps, and persistent
-audio/video skew after encoder gaps, including gaps in individual audio tracks. It also reduces preview readback
-and compatible auxiliary-encoding work. See the [release notes](docs/releases/1.1.2.md).
+Version 1.2.0 adds autonomous multistream: it can publish without starting OBS's native stream, and all destinations
+share the same delay buffer, quality, and audio. Existing streaming/recording sessions remain independent; the
+1.1.2 delay and performance fixes are retained. See the [release notes](docs/releases/1.2.0.md).
 
-### Download 1.1.2
+### Integrated multistream
+
+Open **Docks → Dynamic Delay — Multistream**, add a name, RTMP/RTMPS server, and stream key, then start each
+destination explicitly. Use the Dynamic Delay controls for the shared stream. All destinations receive one H.264
+video/AAC audio stream from OBS Program, with the configured main streaming audio track. There are no separate
+bitrates or canvases per destination, and adding a destination does not add another encoder or full delay buffer.
+
+If a compatible native OBS stream is already active, its encoders are reused. Otherwise the plugin starts one
+private H.264/AAC encoder pair for all its destinations. Starting a native stream later may add encoding work.
+Upload bandwidth increases for each destination. Version 1.2.0 supports SDR NV12/I420 and mono/stereo audio;
+independent canvases, HDR, HEVC, AV1, and Opus are not supported for multistream. Other plugins' outputs are untouched.
+
+Keys are hidden by default and saved locally in `multistream.json` with owner-only permissions, **without
+encryption**. Saved destinations never start automatically. RTMPS verifies TLS certificates; do not share the
+configuration file or screenshots showing a key. See the [setup and security details](docs/guide.en.md#integrated-multistream).
+
+### Download 1.2.0
 
 | Platform | Recommended download | Alternatives |
 | --- | --- | --- |
-| macOS 13+ (Apple Silicon and Intel) | [Universal ZIP](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-macos-universal.zip) | [Universal PKG — unsigned/not notarized](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-macos-universal.pkg) · [Debug symbols](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-macos-universal-dSYMs.tar.xz) |
-| Windows 10/11 x64 | [Windows ZIP](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-windows-x64.zip) | [Debug symbols](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-windows-x64-symbols.zip) |
-| Ubuntu 24.04 x86_64 | [Debian package](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-x86_64-linux-gnu.deb) | [Native tar.xz](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-x86_64-ubuntu-gnu.tar.xz) · [Debug symbols](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-x86_64-linux-gnu-dbgsym.ddeb) |
-| Source | [Source tarball](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-source.tar.xz) | [All assets and checksums](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.2) |
+| macOS 13+ (Apple Silicon and Intel) | [Universal ZIP](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-macos-universal.zip) | [Universal PKG — unsigned/not notarized](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-macos-universal.pkg) · [Debug symbols](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-macos-universal-dSYMs.tar.xz) |
+| Windows 10/11 x64 | [Windows ZIP](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-windows-x64.zip) | [Debug symbols](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-windows-x64-symbols.zip) |
+| Ubuntu 24.04 x86_64 | [Debian package](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-x86_64-linux-gnu.deb) | [Native tar.xz](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-x86_64-ubuntu-gnu.tar.xz) · [Debug symbols](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-x86_64-linux-gnu-dbgsym.ddeb) |
+| Source | [Source tarball](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-source.tar.xz) | [All assets and checksums](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.2.0) |
 
-Read the [1.1.2 release notes](docs/releases/1.1.2.md) before installing. The ZIP is the recommended macOS download:
+Read the [1.2.0 release notes](docs/releases/1.2.0.md) before installing. The ZIP is the recommended macOS download:
 its plugin bundle is ad-hoc signed, while the alternative PKG is not signed with Developer ID and is not
 Apple-notarized. The Windows DLL is not Authenticode-signed.
 
@@ -81,14 +98,14 @@ Do not copy loose <code>bin</code> and <code>data</code> folders into the OBS in
 ~~~bash
 sudo add-apt-repository ppa:obsproject/obs-studio
 sudo apt update
-sudo apt install ./obs-dynamic-delay-1.1.2-x86_64-linux-gnu.deb
+sudo apt install ./obs-dynamic-delay-1.2.0-x86_64-linux-gnu.deb
 ~~~
 
 Restart OBS and select **Docks → Dynamic Delay**.
 
 Linux packages target the OBS 32.2.x module ABI on native Ubuntu 24.04 x86_64; they are not Flatpak, Snap, or
 generic cross-distribution packages. Verify downloads against
-[SHA256SUMS.txt](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/SHA256SUMS.txt).
+[SHA256SUMS.txt](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/SHA256SUMS.txt).
 
 For complete installation, audio-routing, usage, performance, architecture, and build instructions, read the
 **[English technical guide](docs/guide.en.md)**.
@@ -136,11 +153,11 @@ Video remains packet-based. The hold-scene audio uses a private bounded PCM brid
 The repository contains the native C++ plugin at the root and the Next.js website under <code>website/</code>.
 Builds and tests run for universal macOS, Windows x64, and Ubuntu 24.04 x86_64.
 
-The five SDK-free regression suites exercise the production workflow, including the **real production OutputSession and
-HoldPipeline** with controlled libobs boundaries. They pass on macOS with strict warnings, ASan+UBSan, and TSan.
-The separate packet-core model is not a substitute for production-session coverage. Optional real-libobs GPU and
-recording integration tests are available separately; see [test scope](tests/README.md) and the
-[validation notes](docs/releases/1.1.2.md#validation).
+Regression suites exercise the production workflow, including the **real production OutputSession and HoldPipeline**
+with controlled libobs boundaries. The separate packet-core model is not a substitute for production-session
+coverage. Optional real-libobs GPU, recording, and loopback multistream integration tests are separate from unit
+coverage. Current release validation is pending; see [test scope](tests/README.md) and the
+[validation notes](docs/releases/1.2.0.md#validation).
 
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
@@ -157,7 +174,7 @@ OBS Dynamic Delay es un plugin nativo para OBS Studio que introduce un delay var
 grabación activo. Almacena los paquetes codificados que OBS ya produce, por lo que mantener el delay consume
 principalmente RAM y no exige decodificar y recodificar permanentemente.
 
-La versión **1.1.2** es compatible con OBS Studio 32.2.x y Qt 6 en macOS 13+, Windows 10/11 x64 y Ubuntu 24.04
+La versión **1.2.0** es compatible con OBS Studio 32.2.x y Qt 6 en macOS 13+, Windows 10/11 x64 y Ubuntu 24.04
 x86_64 nativo.
 
 ### Funciones principales
@@ -171,23 +188,41 @@ x86_64 nativo.
 - Estima la RAM a partir del bitrate observado o configurado.
 - Abre una vista de audiencia opcional y de bajo coste sólo cuando se necesita.
 - Controla de forma independiente streaming y grabación simultáneos.
+- Envía un único stream con delay a hasta ocho destinos RTMP/RTMPS desde el panel Multistream integrado.
 - Admite outputs Hybrid MP4/MOV, RTMP y FLV normales con una sola pista de vídeo en OBS 32.
 
-La versión 1.1.2 corrige bloqueos al cancelar/rearmar rápidamente, el progreso del buffer al pausar, los timestamps
-tras reconectar y la desincronización A/V persistente tras huecos del encoder, también en pistas de audio
-individuales. Reduce además la lectura de la preview y la codificación auxiliar compatible. Consulta las
-[notas de la versión](docs/releases/1.1.2.md).
+La versión 1.2.0 añade multistream autónomo: puede emitir sin iniciar el directo nativo de OBS y todos sus destinos
+comparten el mismo buffer de delay, calidad y audio. Las sesiones existentes de streaming/grabación siguen siendo
+independientes y se conservan las correcciones de delay y rendimiento de 1.1.2. Consulta las
+[notas de la versión](docs/releases/1.2.0.md).
 
-### Descargar 1.1.2
+### Multistream integrado
+
+Abre **Paneles/Docks → Delay dinámico — Multistream**, añade un nombre, servidor RTMP/RTMPS y clave, e inicia cada
+destino expresamente. Usa los controles de Delay dinámico para el stream compartido. Todos reciben el mismo vídeo
+H.264 y audio AAC de Program, con la pista principal de audio de streaming configurada en OBS. No hay bitrates ni
+canvases distintos por destino; añadir uno no crea otro encoder ni otro buffer completo de delay.
+
+Si ya hay un stream nativo compatible de OBS activo, se reutilizan sus encoders. En caso contrario, el plugin
+inicia una pareja privada H.264/AAC para todos sus destinos. Iniciar después un stream nativo puede añadir trabajo
+de codificación. La subida aumenta con cada destino. Multistream 1.2.0 admite SDR NV12/I420 y audio mono/estéreo;
+no admite canvases independientes, HDR, HEVC, AV1 ni Opus. No se modifican outputs de otros plugins.
+
+Las claves se ocultan por defecto y se guardan localmente en `multistream.json` con permisos sólo para el
+propietario, **sin cifrar**. Los destinos guardados nunca arrancan automáticamente. RTMPS verifica los certificados
+TLS; no compartas la configuración ni capturas que muestren claves. Consulta la
+[configuración y seguridad](docs/guide.es.md#multistream-integrado).
+
+### Descargar 1.2.0
 
 | Plataforma | Descarga recomendada | Alternativas |
 | --- | --- | --- |
-| macOS 13+ (Apple Silicon e Intel) | [ZIP universal](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-macos-universal.zip) | [PKG universal — sin firma/notarización](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-macos-universal.pkg) · [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-macos-universal-dSYMs.tar.xz) |
-| Windows 10/11 x64 | [ZIP para Windows](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-windows-x64.zip) | [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-windows-x64-symbols.zip) |
-| Ubuntu 24.04 x86_64 | [Paquete Debian](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-x86_64-linux-gnu.deb) | [tar.xz nativo](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-x86_64-ubuntu-gnu.tar.xz) · [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-x86_64-linux-gnu-dbgsym.ddeb) |
-| Código fuente | [Tarball de fuentes](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/obs-dynamic-delay-1.1.2-source.tar.xz) | [Todos los archivos y checksums](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.2) |
+| macOS 13+ (Apple Silicon e Intel) | [ZIP universal](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-macos-universal.zip) | [PKG universal — sin firma/notarización](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-macos-universal.pkg) · [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-macos-universal-dSYMs.tar.xz) |
+| Windows 10/11 x64 | [ZIP para Windows](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-windows-x64.zip) | [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-windows-x64-symbols.zip) |
+| Ubuntu 24.04 x86_64 | [Paquete Debian](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-x86_64-linux-gnu.deb) | [tar.xz nativo](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-x86_64-ubuntu-gnu.tar.xz) · [Símbolos de depuración](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-x86_64-linux-gnu-dbgsym.ddeb) |
+| Código fuente | [Tarball de fuentes](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/obs-dynamic-delay-1.2.0-source.tar.xz) | [Todos los archivos y checksums](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.2.0) |
 
-Lee las [notas de la versión 1.1.2](docs/releases/1.1.2.md) antes de instalar. El ZIP es la descarga recomendada para
+Lee las [notas de la versión 1.2.0](docs/releases/1.2.0.md) antes de instalar. El ZIP es la descarga recomendada para
 macOS: su bundle lleva firma ad hoc, mientras que el PKG alternativo no tiene firma Developer ID ni está notarizado
 por Apple. El DLL de Windows no tiene firma Authenticode.
 
@@ -217,14 +252,14 @@ uses <code>%APPDATA%</code>.
 ~~~bash
 sudo add-apt-repository ppa:obsproject/obs-studio
 sudo apt update
-sudo apt install ./obs-dynamic-delay-1.1.2-x86_64-linux-gnu.deb
+sudo apt install ./obs-dynamic-delay-1.2.0-x86_64-linux-gnu.deb
 ~~~
 
 Reinicia OBS y selecciona **Docks → Dynamic Delay**.
 
 Los paquetes Linux apuntan a la ABI de módulos OBS 32.2.x en Ubuntu 24.04 x86_64 nativo; no son paquetes Flatpak,
 Snap ni genéricos para otras distribuciones. Comprueba las descargas con
-[SHA256SUMS.txt](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/SHA256SUMS.txt).
+[SHA256SUMS.txt](https://github.com/stanixdor/obs-variable-delay/releases/download/1.2.0/SHA256SUMS.txt).
 
 Para consultar la instalación completa, el routing de audio, el uso, el rendimiento, la arquitectura y la
 compilación, lee la **[guía técnica en español](docs/guide.es.md)**.
@@ -272,11 +307,11 @@ admite los modos **Scene mix**, **Dedicated source**, **Reserved OBS track** y *
 El repositorio contiene el plugin nativo en C++ en la raíz y la web Next.js dentro de <code>website/</code>. Los
 builds y tests se ejecutan para macOS universal, Windows x64 y Ubuntu 24.04 x86_64.
 
-Las cinco suites de regresión sin SDK ejercitan el flujo de producción, incluido el **código real de OutputSession y
-HoldPipeline** con una frontera de libobs controlada. Pasan en macOS con warnings estrictos, ASan+UBSan y TSan.
-El modelo separado del núcleo de paquetes no sustituye la cobertura de la sesión real. Hay pruebas opcionales de
-integración GPU y grabación con libobs real; consulta el [alcance de los tests](tests/README.md) y las
-[notas de validación](docs/releases/1.1.2.md#validación).
+Las suites de regresión ejercitan el flujo de producción, incluido el **código real de OutputSession y HoldPipeline**
+con una frontera de libobs controlada. El modelo separado de paquetes no sustituye la cobertura de la sesión real.
+Hay pruebas opcionales de GPU, grabación y multistream loopback con libobs real, separadas de los tests unitarios.
+La validación de esta release está pendiente; consulta el [alcance de los tests](tests/README.md) y las
+[notas de validación](docs/releases/1.2.0.md#validación).
 
 - [Cómo contribuir](CONTRIBUTING.md)
 - [Política de seguridad](SECURITY.md)

@@ -166,6 +166,7 @@ void DelayController::shutdown()
 	if (shutdownComplete_.exchange(true, std::memory_order_acq_rel))
 		return;
 	shuttingDown_.store(true, std::memory_order_release);
+	emit about_to_shutdown();
 	pollTimer_.stop();
 	obs_frontend_remove_event_callback(&DelayController::frontend_event, this);
 	signal_handler_t *coreSignals = obs_get_signal_handler();
@@ -431,6 +432,36 @@ void DelayController::add_output(obs_output_t *output, const std::string &label)
 	}
 	outputErrors_.erase(label);
 	sessions_.emplace(output, std::move(session));
+}
+
+bool DelayController::add_managed_output(obs_output_t *output, std::string &error)
+{
+	if (shuttingDown_ || !output) {
+		error = "Dynamic Delay is shutting down.";
+		return false;
+	}
+	add_output(output, "Multistream");
+	std::scoped_lock lock(mutex_);
+	if (!sessions_.contains(output)) {
+		error = outputErrors_["Multistream"];
+		return false;
+	}
+	return true;
+}
+
+void DelayController::managed_output_started(obs_output_t *output)
+{
+	refresh_audio_preflight();
+	start_delay_on_output(output);
+	mark_dirty();
+}
+
+void DelayController::remove_managed_output(obs_output_t *output)
+{
+	remove_output(output, "Multistream");
+	if (!shuttingDown_)
+		refresh_audio_preflight();
+	mark_dirty();
 }
 
 void DelayController::remove_output(obs_output_t *output, const std::string &label)
