@@ -99,9 +99,11 @@ MultistreamTarget target(const uint16_t port, const std::string &scheme = "rtmp"
 
 class TcpFixture final : public QTcpServer {
 public:
-	explicit TcpFixture(const uint16_t port, const bool trickle = false) : trickle_(trickle)
+	explicit TcpFixture(const uint16_t port, const bool trickle = false,
+			    const QHostAddress &address = QHostAddress::LocalHost)
+		: trickle_(trickle)
 	{
-		require(listen(QHostAddress::LocalHost, port), "Cannot bind local TCP fixture");
+		require(listen(address, port), "Cannot bind local TCP fixture");
 	}
 	int accepted = 0;
 	int trickles = 0;
@@ -326,6 +328,21 @@ void terminal_error_can_restart()
 	require(transport.snapshot().empty(), "stop_all retained terminal diagnostics");
 }
 
+void ipv6_literal_without_path()
+{
+	TcpFixture server(19405, false, QHostAddress::LocalHostIPv6);
+	MultistreamTransport transport;
+	auto endpoint = target(19405);
+	endpoint.server = "rtmp://[::1]:19405";
+	std::string error;
+	require(transport.start(endpoint, description(), error), "IPv6 literal destination was rejected");
+	require(wait_until([&] { return server.accepted > 0; }, 3000ms),
+		"IPv6 authority without an application slash was parsed incorrectly");
+	const auto stopped = Clock::now();
+	transport.stop_all();
+	require(Clock::now() - stopped < 100ms, "IPv6 stop blocked the caller");
+}
+
 void logs_are_redacted()
 {
 	std::scoped_lock lock(logMutex);
@@ -342,12 +359,13 @@ int main(int argc, char **argv)
 	const auto previousQtHandler = qInstallMessageHandler(qt_log);
 	av_log_set_callback(ffmpeg_log); // Isolated test process; production never changes this global callback.
 	int failures = 0;
-	const std::array<std::pair<const char *, void (*)()>, 6> tests = {{
+	const std::array<std::pair<const char *, void (*)()>, 7> tests = {{
 		{"invalid inputs", invalid_inputs},
 		{"silent peer / bounded stop", silent_peer_stop},
 		{"slow-trickle absolute deadline", trickle_deadline},
 		{"untrusted RTMPS certificate", untrusted_tls},
 		{"terminal error / restart same ID", terminal_error_can_restart},
+		{"IPv6 literal / no application path", ipv6_literal_without_path},
 		{"secret-safe diagnostics", logs_are_redacted},
 	}};
 	for (const auto &[name, test] : tests) {

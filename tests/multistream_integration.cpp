@@ -505,6 +505,8 @@ void controller_checks(const QString &ffmpeg, const std::filesystem::path &direc
 		require(!controller.save_target({"bad", "Invalid", "rtmp://user:pass@127.0.0.1/live", "integration"},
 						error),
 			"URL-embedded credentials accepted");
+		require(!controller.save_target({"bad", "Invalid", "rtmp://127.0.0.1:0/live", "integration"}, error),
+			"Invalid port zero accepted before asynchronous startup");
 		require(controller.save_target(target, error),
 			"Cannot save isolated controller destination: " + error.toStdString());
 		for (int index = 1; index < 8; ++index)
@@ -546,12 +548,25 @@ void controller_checks(const QString &ffmpeg, const std::filesystem::path &direc
 		require(!controller.running(id) && delay.snapshot().activeOutputs == 0,
 			"Cancelling while encoder metadata is pending retained the master");
 		Receiver receiver(ffmpeg, 19364, directory / "controller-hardware.flv");
+		Receiver secondReceiver(ffmpeg, 19365, directory / "controller-second.flv");
+		require(controller.save_target({"controller-secondary", "Controller second",
+						"rtmp://127.0.0.1:19365/live", "integration"},
+					       error),
+			"Cannot save second controller destination");
 		require(controller.start_target(id, error), "Real controller startup failed: " + error.toStdString());
 		metadataPending = controller.statuses().front().state == MultistreamState::Connecting;
+		require(controller.start_target("controller-secondary", error), "Second pending startup failed");
 		require(!controller.remove_target(id, error) && !controller.save_target(target, error),
 			"An active destination was editable or removable");
-		wait_until([&] { return controller.statuses().front().state == MultistreamState::Streaming; }, 15,
-			   "Production controller did not publish hardware packets");
+		wait_until(
+			[&] {
+				const auto states = controller.statuses();
+				return states.size() == 2 &&
+				       std::all_of(states.begin(), states.end(), [](const auto &s) {
+					       return s.state == MultistreamState::Streaming;
+				       });
+			},
+			15, "Production controller did not publish both pending hardware destinations");
 		require(delay.snapshot().activeOutputs == 1,
 			"Production controller did not register one shared delay session");
 		pump_events(1.5);
@@ -564,6 +579,12 @@ void controller_checks(const QString &ffmpeg, const std::filesystem::path &direc
 		wait_until([&] { return delay.snapshot().state == DelayState::Bypass; }, 8,
 			   "Controller return-to-live did not complete");
 		pump_events(1);
+		controller.stop_target("controller-secondary");
+		secondReceiver.wait_closed();
+		require(controller.running(id) && delay.snapshot().activeOutputs == 1,
+			"Stopping one destination discarded the shared master used by another");
+		require(controller.remove_target("controller-secondary", error),
+			"Cannot remove stopped controller target");
 		controller.stop_target(id);
 		wait_until([&] { return !controller.running(id) && delay.snapshot().activeOutputs == 0; }, 5,
 			   "Stopping the last destination retained the capture encoder");
@@ -594,6 +615,7 @@ void controller_checks(const QString &ffmpeg, const std::filesystem::path &direc
 	metrics << "result=PASS\nreal_multistream_controller_and_delay_controller=1\n"
 		<< "save_reload_limit_validation_owner_permissions=PASS\nno_autostart=PASS\n"
 		<< "cancel_pending_metadata=PASS\n"
+		<< "two_pending_targets_one_shared_session=PASS\nstop_one_preserves_master=PASS\n"
 		<< "native_streaming_output=null\nencoder=VideoToolbox_H264\nmetadata_async_pending_observed="
 		<< metadataPending << "\nprofile_and_collection_stop=PASS\nlast_target_releases_master=PASS\n";
 	frontendScenes.clear();

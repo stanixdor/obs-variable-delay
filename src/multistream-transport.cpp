@@ -421,6 +421,14 @@ private:
 		serverBuffer_.push_back('\0');
 		if (!RTMP_SetupURL(rtmp_, serverBuffer_.data()))
 			return false;
+		// URL authorities require brackets around IPv6, but certificate IP
+		// identities do not. Keep tcUrl intact and pass the bare hostname to
+		// librtmp's TLS hostname verification (which copies this AVal).
+		auto &hostname = rtmp_->Link.hostname;
+		if (hostname.av_len >= 2 && hostname.av_val[0] == '[' && hostname.av_val[hostname.av_len - 1] == ']') {
+			++hostname.av_val;
+			hostname.av_len -= 2;
+		}
 		RTMP_EnableWrite(rtmp_);
 		RTMP_AddStream(rtmp_, target_.key.c_str());
 		rtmp_->Link.receiveTimeout = 1;

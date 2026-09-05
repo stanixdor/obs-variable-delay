@@ -426,7 +426,7 @@ void MultistreamController::load_settings()
 	if (!file.open(QIODevice::ReadOnly) || file.size() > 131'072)
 		return;
 	const auto document = QJsonDocument::fromJson(file.readAll());
-	for (const auto &entry : document.object().value("targets").toArray()) {
+	for (const auto entry : document.object().value("targets").toArray()) {
 		const auto obj = entry.toObject();
 		MultistreamTarget target{obj.value("id").toString().toStdString(),
 					 obj.value("name").toString().toStdString(),

@@ -10,7 +10,7 @@ const directory = process.argv[2];
 assert.ok(directory, "Usage: node tests/verify-multistream.mjs <artifact-directory>");
 const run = (tool, args) => execFileSync(tool, args, {maxBuffer: 64 * 1024 * 1024});
 const sharedFiles = ["fast.flv", "secondary-before-reconnect.flv", "secondary-after-reconnect.flv", "slow.flv"];
-const controllerFiles = ["controller-hardware.flv", "profile-stop.flv", "collection-stop.flv"];
+const controllerFiles = ["controller-hardware.flv", "controller-second.flv", "profile-stop.flv", "collection-stop.flv"];
 let reference;
 for (const name of [...sharedFiles, ...controllerFiles.filter((name) => existsSync(join(directory, name)))]) {
   const file = join(directory, name);
