@@ -59,6 +59,7 @@ private:
 	AudiencePreviewWidget *preview_ = nullptr;
 	bool applying_ = false;
 	bool configurationEnabled_ = true;
+	int lastStatusColor_ = -1;
 };
 
 } // namespace dynamic_delay

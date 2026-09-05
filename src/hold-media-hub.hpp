@@ -8,15 +8,18 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace dynamic_delay {
+
+class SharedHoldEncoding;
 
 /**
  * Shared private media graph for one delay activation.  Streaming and
  * recording sessions clone their encoders against the same video_t/audio_t,
  * so the hold scene is present in libobs's render tree exactly once.
  */
-class HoldMediaHub final {
+class HoldMediaHub final : public std::enable_shared_from_this<HoldMediaHub> {
 public:
 	static std::shared_ptr<HoldMediaHub> create(obs_source_t *holdScene, HoldAudioConfig config,
 						    std::string &error);
@@ -45,6 +48,9 @@ public:
 	[[nodiscard]] bool matches(obs_source_t *holdScene, const HoldAudioConfig &config) const noexcept;
 	void set_activation_signature(HoldAudioConfig config) noexcept;
 	bool force_audio_silence();
+	// Equal complete primary encoder layouts can share one auxiliary
+	// collector, including its pause state. Partial A/V matches stay isolated.
+	std::shared_ptr<SharedHoldEncoding> acquire_encoding(obs_output_t *primaryOutput, std::string &error);
 
 private:
 	HoldMediaHub(obs_source_t *holdScene, HoldAudioConfig config);
@@ -70,6 +76,7 @@ private:
 	bool sceneActive_ = false;
 	bool ownsAudio_ = false;
 	bool audioSilenced_ = false;
+	std::vector<std::weak_ptr<SharedHoldEncoding>> encodings_;
 };
 
 } // namespace dynamic_delay

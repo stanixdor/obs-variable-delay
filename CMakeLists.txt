@@ -11,6 +11,7 @@ endif()
 option(ENABLE_FRONTEND_API "Use obs-frontend-api for UI functionality" OFF)
 option(ENABLE_QT "Use Qt functionality" OFF)
 option(ENABLE_TESTS "Build Dynamic Delay unit tests" OFF)
+option(ENABLE_OBS_INTEGRATION_TESTS "Build opt-in tests against real libobs and a graphics backend" OFF)
 
 include(compilerconfig)
 include(defaults)
@@ -75,6 +76,8 @@ target_sources(
     src/output-session.cpp
     src/output-session.hpp
     src/plugin-main.cpp
+    src/preview-capture.cpp
+    src/preview-capture.hpp
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
@@ -95,4 +98,37 @@ endif()
 if(ENABLE_TESTS)
   enable_testing()
   add_subdirectory(tests)
+endif()
+
+if(ENABLE_OBS_INTEGRATION_TESTS)
+  find_package(Qt6 REQUIRED COMPONENTS Gui)
+  add_executable(preview_gpu_integration tests/preview_gpu_integration.cpp src/preview-capture.cpp)
+  target_compile_features(preview_gpu_integration PRIVATE cxx_std_20)
+  target_include_directories(preview_gpu_integration PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}")
+  target_link_libraries(preview_gpu_integration PRIVATE OBS::libobs Qt6::Gui)
+  target_compile_options(
+    preview_gpu_integration
+    PRIVATE $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang,GNU>:-Wno-deprecated-declarations>
+  )
+  if(APPLE AND OBS_LOCAL_APP_SDK)
+    target_link_options(preview_gpu_integration PRIVATE "LINKER:-rpath,${OBS_APP}/Contents/Frameworks")
+  endif()
+  add_executable(
+    output_session_integration
+    tests/output_session_integration.cpp
+    src/output-session.cpp
+    src/hold-pipeline.cpp
+    src/hold-media-hub.cpp
+    src/hold-audio-tap.cpp
+  )
+  target_compile_features(output_session_integration PRIVATE cxx_std_20)
+  target_include_directories(output_session_integration PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}")
+  target_link_libraries(output_session_integration PRIVATE OBS::libobs Qt6::Gui plugin-support)
+  target_compile_options(
+    output_session_integration
+    PRIVATE $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang,GNU>:-Wno-deprecated-declarations>
+  )
+  if(APPLE AND OBS_LOCAL_APP_SDK)
+    target_link_options(output_session_integration PRIVATE "LINKER:-rpath,${OBS_APP}/Contents/Frameworks")
+  endif()
 endif()

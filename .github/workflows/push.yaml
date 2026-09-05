@@ -6,6 +6,7 @@ on:
       - master
       - main
       - 'release/**'
+      - 'codex/**'
     tags:
       - '*'
 
@@ -42,7 +43,7 @@ jobs:
 
   check-format:
     name: Check Formatting 🔍
-    if: github.ref_name == 'master' || github.ref_name == 'main'
+    if: github.ref_type != 'tag'
     uses: ./.github/workflows/check-format.yaml
     permissions:
       contents: read

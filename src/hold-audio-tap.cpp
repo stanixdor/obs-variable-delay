@@ -19,7 +19,8 @@ struct HoldAudioTap::SharedState {
 		: holdScene(obs_source_get_ref(scene)),
 		  audioSource(obs_source_get_ref(
 			  selection.mode == HoldAudioMode::DedicatedSource ? selection.dedicatedSource : scene)),
-		  config(selection)
+		  config(selection),
+		  fifo(selection.mode == HoldAudioMode::Silence ? nullptr : std::make_unique<Fifo>())
 	{
 	}
 
@@ -32,7 +33,10 @@ struct HoldAudioTap::SharedState {
 	obs_source_t *holdScene = nullptr;
 	obs_source_t *audioSource = nullptr;
 	HoldAudioConfig config;
-	Fifo fifo;
+	// Allocate before either audio clock starts. Silence never needs the
+	// roughly 3 MiB PCM ring; a running ring stays alive after force_silence()
+	// until both clocks stop so neither callback can race its destruction.
+	std::unique_ptr<Fifo> fifo;
 	core::PcmWindowCursor cursor;
 	uint64_t lastPushedTimestampNs = 0;
 	uint64_t lastMainClockTimestampNs = 0;
@@ -167,13 +171,14 @@ void HoldAudioTap::push(SharedState &state, const obs_source_audio_mix &mix, con
 	// libobs may render the same future-dated source block over several ticks
 	// while a positive sync offset catches up.  Queue each timestamp once so
 	// the private clock emits silence instead of repeating PCM.
-	if (timestampNs == 0 || timestampNs <= state.lastPushedTimestampNs || state.lastMainClockTimestampNs == 0 ||
-	    state.lastMainClockFrames == 0 || state.forceSilence.load(std::memory_order_acquire))
+	if (!state.fifo || timestampNs == 0 || timestampNs <= state.lastPushedTimestampNs ||
+	    state.lastMainClockTimestampNs == 0 || state.lastMainClockFrames == 0 ||
+	    state.forceSilence.load(std::memory_order_acquire))
 		return;
 	const uint64_t mainWindowTimestamp =
 		state.lastMainClockTimestampNs +
 		static_cast<uint64_t>(state.lastMainClockFrames) * 1'000'000'000ULL / sampleRate;
-	core::PcmAudioBlock *block = state.fifo.begin_push();
+	core::PcmAudioBlock *block = state.fifo->begin_push();
 	if (!block)
 		return;
 
@@ -208,7 +213,7 @@ void HoldAudioTap::push(SharedState &state, const obs_source_audio_mix &mix, con
 				std::memset(destination, 0, core::PcmAudioBlock::Frames * sizeof(float));
 		}
 	}
-	state.fifo.commit_push();
+	state.fifo->commit_push();
 	state.lastPushedTimestampNs = timestampNs;
 }
 
@@ -240,28 +245,9 @@ bool HoldAudioTap::source_audio_render(void *data, uint64_t *timestampNs, obs_so
 
 	obs_source_audio_mix childMix{};
 	obs_source_get_audio_mix(state.audioSource, &childMix);
-	const std::size_t copyChannels = std::min(channels, core::PcmAudioBlock::MaxChannels);
-	const std::size_t copyMixers = std::min<std::size_t>(MAX_AUDIO_MIXES, core::PcmAudioBlock::MixerCount);
-	const std::size_t firstMixer = state.config.mode == HoldAudioMode::ReservedTrack
-					       ? std::min<std::size_t>(state.config.reservedMixerIndex, copyMixers)
-					       : 0;
-	const std::size_t endMixer =
-		state.config.mode == HoldAudioMode::ReservedTrack ? std::min(firstMixer + 1, copyMixers) : copyMixers;
-	for (std::size_t mixer = firstMixer; mixer < endMixer; ++mixer) {
-		if ((mixers & (1U << mixer)) == 0)
-			continue;
-		for (std::size_t channel = 0; channel < copyChannels; ++channel) {
-			float *destination = output->output[mixer].data[channel];
-			const float *input = childMix.output[mixer].data[channel];
-			if (!destination)
-				continue;
-			if (input)
-				std::memcpy(destination, input, core::PcmAudioBlock::Frames * sizeof(float));
-			else
-				std::memset(destination, 0, core::PcmAudioBlock::Frames * sizeof(float));
-		}
-	}
-
+	// This private composite is only an audio-render dependency in an AUX
+	// view, never a Program mix root. Its already-zeroed output is unused;
+	// the private encoder receives child PCM exclusively through this ring.
 	push(state, childMix, sourceTimestamp, mixers, channels, static_cast<uint32_t>(sampleRate));
 	*timestampNs = sourceTimestamp;
 	return true;
@@ -338,20 +324,13 @@ bool HoldAudioTap::pull(const uint64_t callbackStartNs, uint64_t *newTimestampNs
 								    : callbackStartNs;
 	}
 	const std::size_t copyChannels = std::min(channels, core::PcmAudioBlock::MaxChannels);
-	for (std::size_t mixer = 0; mixer < core::PcmAudioBlock::MixerCount; ++mixer) {
-		if ((activeMixers & (1U << mixer)) == 0)
-			continue;
-		for (std::size_t channel = 0; channel < copyChannels; ++channel) {
-			if (float *destination = mixes[mixer].data[channel])
-				std::memset(destination, 0, core::PcmAudioBlock::Frames * sizeof(float));
-		}
-	}
-
-	if (!state_ || state_->forceSilence.load(std::memory_order_acquire)) {
+	// audio_output's input callback receives buffers cleared by libobs on
+	// every quantum, including inactive mixers. Unwritten spans stay silent.
+	if (!state_ || !state_->fifo || state_->forceSilence.load(std::memory_order_acquire)) {
 		return true;
 	}
 	state_->cursor.consume(
-		state_->fifo, sampleRate, core::PcmAudioBlock::Frames,
+		*state_->fifo, sampleRate, core::PcmAudioBlock::Frames,
 		[copyChannels](const core::PcmAudioBlock &block) { return block.channels == copyChannels; },
 		[&](const core::PcmAudioBlock &block, const std::size_t sourceOffset,
 		    const std::size_t destinationOffset, const std::size_t frames) {

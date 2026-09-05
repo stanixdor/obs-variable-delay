@@ -6,6 +6,22 @@ on:
         description: Project name detected by parsing build spec file
         value: ${{ jobs.check-event.outputs.pluginName }}
 jobs:
+  sanitizer-tests:
+    name: Test production packet engine with ASan + UBSan 🧪
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test without the OBS SDK
+        env:
+          CXX: clang++
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          cmake -S tests -B build_sanitizers -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          cmake --build build_sanitizers --parallel
+          ctest --test-dir build_sanitizers --output-on-failure
+
   check-event:
     name: Check GitHub Event Data 🔎
     runs-on: ubuntu-24.04
@@ -164,7 +180,6 @@ jobs:
         run: |
           : Run Unit Tests 🧪
           cmake --build build_macos \
-            --target packet_delay_tests audio_spsc_fifo_tests \
             --config ${{ needs.check-event.outputs.config }} \
             --parallel
           ctest \
@@ -248,7 +263,6 @@ jobs:
         run: |
           : Run Unit Tests 🧪
           cmake --build build_x86_64 \
-            --target packet_delay_tests audio_spsc_fifo_tests \
             --config ${{ needs.check-event.outputs.config }} \
             --parallel
           ctest \
@@ -318,7 +332,6 @@ jobs:
       - name: Run Unit Tests 🧪
         run: |
           cmake --build build_x64 `
-            --target packet_delay_tests audio_spsc_fifo_tests `
             --config ${{ needs.check-event.outputs.config }} `
             --parallel
           ctest `

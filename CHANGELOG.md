@@ -12,7 +12,45 @@ Este proyecto sigue [Versionado Semántico](https://semver.org/lang/es/) y la es
 
 ### Unreleased
 
-No user-facing changes have been published after 1.1.1.
+No additional changes listed.
+
+### [1.1.2] — 2026-09-05
+
+[Release page and downloads](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.2) ·
+[Full release notes](docs/releases/1.1.2.md)
+
+#### Fixed
+
+- Release retired auxiliary encoders outside the session mutex, preventing a deadlock on rapid cancel/rearm.
+- Freeze filling progress while a recording is paused and resume against media time, not elapsed wall time.
+- Reset queues and the shared A/V timestamp bridge before the first packet of a reconnected output, whether audio
+  or video arrives first; retain B-frame composition offsets.
+- Recover persistent A/V skew after missing video packets or gaps in individual audio tracks, including holes
+  buffered during Filling. Recovery advances all active tracks to a safe buffered GOP and may shorten the
+  effective delay; it neither re-encodes Program nor inserts an additional hold scene.
+- Follow the actual emitted video capture timestamp in the preview, independently of slider changes, and retain
+  required history across recording pauses.
+- Avoid keeping OBS video active or locking video settings merely because the preview is enabled.
+
+#### Performance
+
+- Downscale the existing Program texture to 320×180 on the GPU before readback, at most 2 fps; do not attach a raw
+  video consumer. Folding releases capture/resources/history; hiding the whole dock retains history without
+  repainting.
+- Share a complete auxiliary video/audio encoder bundle only for outputs with identical original encoders, every
+  audio-track position, and media hub. Partial matches stay isolated; video-only matching is not enough. Pause
+  follows the original encoder state already shared by fully matching outputs.
+- Avoid the PCM FIFO allocation in explicit Silence mode and remove redundant PCM clears/copies without changing
+  audio routing.
+
+#### Validation
+
+- Five SDK-free suites pass on macOS with warnings as errors, ASan+UBSan, and TSan.
+- Tests now compile the real `OutputSession` and `HoldPipeline`, controlling only external libobs/encoder
+  boundaries. The older packet-core model remains separate and does not substitute for production tests.
+- Opt-in GPU and recording integration targets use real libobs and a graphics backend; their runtime results are
+  reported separately in the release notes. The 174-second recording and Linux Docker smoke below belong to 1.1.1.
+- Linux builds target native Ubuntu 24.04 x86_64 and the OBS 32.2.x module ABI.
 
 ### [1.1.1] — 2026-09-01
 
@@ -76,7 +114,49 @@ No user-facing changes have been published after 1.1.1.
 
 ### Sin publicar
 
-No se han publicado cambios visibles para el usuario después de la versión 1.1.1.
+No hay cambios adicionales enumerados.
+
+### [1.1.2] — 2026-09-05
+
+[Página de la versión y descargas](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.2) ·
+[Notas completas](docs/releases/1.1.2.md)
+
+#### Corregido
+
+- Liberación de encoders auxiliares retirados fuera del mutex de sesión para evitar bloqueos al cancelar/rearmar
+  rápidamente.
+- El progreso de llenado se congela durante una pausa de grabación y continúa según el reloj de medios, no el
+  tiempo de pared transcurrido.
+- Limpieza de colas y del puente temporal A/V antes del primer paquete tras reconectar, llegue primero audio o
+  vídeo; se conservan los offsets de composición de B-frames.
+- Recuperación de la desincronización A/V persistente tras perder paquetes de vídeo o sufrir huecos en pistas
+  de audio individuales, también si se almacenaron durante Filling. Avanza todas las pistas activas hasta un GOP
+  seguro del buffer y puede acortar el delay efectivo; no recodifica Program ni inserta otra escena de espera.
+- La preview sigue el timestamp de captura del vídeo realmente emitido, independientemente de cambios del slider,
+  y conserva el historial necesario durante las pausas de grabación.
+- La preview no mantiene activo el vídeo de OBS ni bloquea sus ajustes sólo por estar habilitada.
+
+#### Rendimiento
+
+- Reducción de la textura Program existente a 320×180 en la GPU antes de leer a RAM, como máximo a 2 fps, sin
+  consumidor de vídeo raw. Plegar libera captura/recursos/historial; ocultar el panel conserva historial sin
+  repintarlo.
+- Reutilización del conjunto auxiliar completo de encoders de vídeo/audio sólo entre outputs con idénticos
+  encoders originales, cada posición de pista de audio y hub de medios. Las coincidencias parciales quedan
+  aisladas; no basta con que coincida el vídeo. La pausa sigue el estado de encoders originales ya compartido por
+  los outputs que coinciden por completo.
+- El modo Silence explícito no reserva la FIFO PCM; se eliminan borrados/copias PCM redundantes sin cambiar el
+  routing de audio.
+
+#### Validación
+
+- Cinco suites sin SDK pasan en macOS con warnings como errores, ASan+UBSan y TSan.
+- Las pruebas compilan ahora el código real de `OutputSession` y `HoldPipeline`, controlando sólo las fronteras
+  externas de libobs/encoders. El modelo anterior de paquetes sigue separado y no sustituye los tests de producción.
+- Los targets opcionales de integración GPU y grabación usan libobs real y un backend gráfico; sus resultados
+  runtime se comunican por separado en las notas de la release. La grabación de 174 segundos y el smoke Linux
+  Docker que figuran abajo pertenecen a 1.1.1.
+- La compilación Linux apunta a Ubuntu 24.04 x86_64 nativo y a la ABI de módulos OBS 32.2.x.
 
 ### [1.1.1] — 2026-09-01
 
@@ -136,3 +216,4 @@ No se han publicado cambios visibles para el usuario después de la versión 1.1
   de Windows no tiene firma Authenticode.
 
 [1.1.1]: https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.1
+[1.1.2]: https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.2

@@ -2,12 +2,14 @@
 
 Plugin nativo para OBS Studio que permite **añadir, cancelar, cambiar o quitar delay sin detener la emisión ni la grabación**. Trabaja sobre los paquetes ya comprimidos que OBS entrega al output, por lo que el coste estable es principalmente RAM y no una segunda codificación permanente.
 
-Versión: `1.1.1`<br>
+Versión: `1.1.2`<br>
 Compatibilidad de referencia: OBS Studio `32.2.x`, Qt 6, macOS 13+, Windows 10/11 x64 y Ubuntu 24.04 x86_64.
 
-La versión 1.1.1 corrige en **macOS, Windows y Linux** la detección de Hybrid MP4/MOV y RTMP de una sola pista
-en OBS 32: estos outputs anuncian capacidad multivídeo aunque no la estén usando. También corrige la ruta de
-instalación global en Windows y amplía el diagnóstico del encoder auxiliar en las tres plataformas.
+La versión 1.1.2 corrige bloqueos al cancelar/rearmar, el progreso durante las pausas de grabación, el reinicio de
+timestamps tras reconectar y la desincronización A/V persistente tras huecos del encoder en **macOS, Windows y
+Linux**. Reduce además las lecturas de GPU y el trabajo de encoders auxiliares compatibles, sin añadir una
+recodificación permanente de Program. Descarga los
+[artefactos y checksums oficiales 1.1.2](https://github.com/stanixdor/obs-variable-delay/releases/tag/1.1.2).
 
 ## Qué hace
 
@@ -17,7 +19,7 @@ instalación global en Windows y amplía el diagnóstico del encoder auxiliar en
 - Mantiene el uso normal de OBS: se pueden cambiar escenas y operar Studio con el delay activo.
 - Muestra una escena elegida mientras construye el buffer inicial.
 - Calcula la RAM prevista a partir del bitrate real observado o del bitrate configurado.
-- Incluye una vista de audiencia plegable, a 320×180 y 2 fps, que se captura únicamente mientras está abierta.
+- Incluye una vista de audiencia plegable, reducida a 320×180 en la GPU antes de leer a RAM, a un máximo de 2 fps.
 - Reproduce audio durante la escena de espera mediante un mezclador privado; incluye modos de escena, fuente
   dedicada, pista reservada y silencio explícito.
 - Conserva el layout de pistas del output y hace los empalmes de vídeo únicamente en keyframes.
@@ -34,6 +36,17 @@ instalación global en Windows y amplía el diagnóstico del encoder auxiliar en
 5. Al pulsar **Remove delay / cancel**, el plugin sigue entregando una salida válida hasta el siguiente keyframe vivo y vuelve entonces al directo, sin parar streaming o grabación.
 
 Si se cancela durante la preparación o el llenado, el plugin vuelve del mismo modo a la señal viva. Cambiar segundos o escena con el delay activo ejecuta un rearme automático con la nueva configuración; el output permanece activo.
+
+La pausa de grabación detiene el progreso de llenado según el reloj de medios y pausa el output auxiliar privado.
+Al reanudar continúa el mismo buffer, sin contar el tiempo pausado como contenido nuevo. Una reconexión de streaming
+vacía las colas y el puente temporal anterior antes del primer paquete de audio o vídeo de la nueva época; después
+se rearma.
+
+Si el encoder pierde frames o aparece un hueco en una pista de audio, el plugin puede realinear todas las pistas
+de audio activas y el vídeo en un GOP completo del buffer. Esta recuperación puede acortar el delay efectivo; no
+decodifica/recodifica Program, no empalma en P/B-frames dependientes ni muestra otra escena de espera. El slider
+configurado y el frame realmente emitido son distintos: la preview sigue el timestamp de captura emitido, no un
+valor del slider que todavía no se ha aplicado.
 
 ## Audio de la escena de espera
 
@@ -74,7 +87,9 @@ Para configurar **Reserved OBS track**:
 
 3. Abre OBS y activa **Paneles/Docks → Delay dinámico**.
 
-El artefacto local está firmado *ad hoc*. No está notarizado con una cuenta Apple Developer, por lo que macOS puede pedir autorización al instalarlo fuera de este equipo.
+Usa el ZIP universal como descarga recomendada. Su bundle tiene firma *ad hoc*. El PKG universal alternativo no
+tiene firma Developer ID ni está notarizado por Apple; macOS puede pedir autorización explícita. Comprueba la
+descarga con [SHA256SUMS.txt](https://github.com/stanixdor/obs-variable-delay/releases/download/1.1.2/SHA256SUMS.txt).
 
 ### Windows x64
 
@@ -115,19 +130,20 @@ El DLL incluido no lleva firma Authenticode. La firma para distribución públic
 
 ### Ubuntu 24.04 x86_64
 
-La opción recomendada para una instalación nativa es el paquete Debian. Requiere OBS Studio 32.2 o posterior;
-si esa versión no está en los repositorios configurados, puede obtenerse desde el PPA oficial de OBS:
+El paquete Debian es la opción recomendada para una instalación nativa. La release apunta a la ABI de módulos
+OBS Studio 32.2.x en Ubuntu 24.04 x86_64, no a cualquier ABI posterior. Instala un build compatible de OBS 32.2.x;
+el PPA oficial de OBS es una opción, pero comprueba la versión que ofrece antes de instalar:
 
 ```bash
 sudo add-apt-repository ppa:obsproject/obs-studio
 sudo apt update
-sudo apt install ./obs-dynamic-delay-1.1.1-x86_64-linux-gnu.deb
+sudo apt install ./obs-dynamic-delay-1.1.2-x86_64-linux-gnu.deb
 ```
 
 Como archivo alternativo, el `tar.xz` contiene el layout estándar `lib/share` para `/usr`:
 
 ```bash
-sudo tar -xJf obs-dynamic-delay-1.1.1-x86_64-ubuntu-gnu.tar.xz -C /usr
+sudo tar -xJf obs-dynamic-delay-1.1.2-x86_64-ubuntu-gnu.tar.xz -C /usr
 ```
 
 Reinicia OBS y activa **Docks → Dynamic Delay**. Estos dos artefactos están construidos para OBS nativo en
@@ -135,7 +151,11 @@ Ubuntu 24.04 x86_64; no se presentan como paquetes para Flatpak, Snap ni otras d
 
 ## Uso y rendimiento
 
-La estimación de memoria usa `bitrate total × segundos ÷ 8`, con un margen del 20 %. Con CQP, CRF, ICQ, lossless o una pista sin bitrate fijo, el panel indica que está midiendo y muestra el valor real tras una ventana de dos segundos de output. Al abrir la vista de audiencia se suma su historial RGB16; en el peor caso de 300 segundos son aproximadamente 67 MiB adicionales. El buffer principal tiene un límite de seguridad de 4 GiB y el preroll auxiliar uno de 128 MiB.
+La estimación de memoria usa `bitrate total × segundos ÷ 8`, con un margen del 20 %. Con CQP, CRF, ICQ, lossless o
+una pista sin bitrate fijo, el panel mide el valor real tras una ventana de dos segundos de output. Al abrir la
+preview se añade historial RGB16: un historial normal de 300 segundos consume unos 67 MiB. También conserva el
+delay efectivo actual y los frames anteriores a una pausa que sigan siendo necesarios, con una cantidad de frames
+acotada. El buffer principal de paquetes tiene un límite de seguridad de 4 GiB y el preroll auxiliar, de 128 MiB.
 
 Durante **Preparing/Filling** se crea un segundo encoder de vídeo con la misma configuración que el output. Esto es necesario para producir la escena de espera con headers compatibles. Se destruye al entrar en **Delay active**. Para el menor impacto al jugar:
 
@@ -144,16 +164,36 @@ Durante **Preparing/Filling** se crea un segundo encoder de vídeo con la misma 
 - evita ejecutar streaming y grabación con configuraciones distintas si no necesitas ambos outputs;
 - configura un intervalo de keyframes razonable (por ejemplo, 2 segundos), ya que todas las entradas y salidas esperan un keyframe seguro.
 
-Streaming y grabación simultáneos comparten una sola vista, reloj y FIFO de la escena de espera. El puente PCM es
-fijo y acotado: 16 bloques × 1024 frames × 6 mixes × 8 canales, aproximadamente 3 MiB por activación, sin
-reservar audio proporcional a los segundos de delay. Su lookahead interno es de un quantum de OBS, unos 21,3 ms
-a 48 kHz.
+Los outputs simultáneos pueden compartir la vista, el reloj y el puente PCM de la escena de espera. Los outputs
+compatibles también reutilizan un conjunto auxiliar completo de codificación, únicamente si
+coinciden el encoder de vídeo original, todos los encoders de audio y sus posiciones de pista, y el hub de medios
+de espera. No basta con que coincida el vídeo: las coincidencias parciales conservan encoders auxiliares privados.
+Los outputs que coinciden por completo ya comparten los encoders originales; la pausa auxiliar sigue ese estado
+compartido, también si la grabación admite pausa. Detener un suscriptor no destruye el conjunto mientras otro lo
+necesite.
 
-## Limitaciones deliberadas de la versión 1.1
+El puente PCM es fijo y acotado: 16 bloques × 1024 frames × 6 mixes × 8 canales, unos 3 MiB por activación, sin
+depender de los segundos de delay. El modo **Silence** explícito no reserva esta FIFO. Se eliminan borrados y copias
+PCM redundantes, conservando el mismo routing y comportamiento de silencio. El lookahead interno es de un quantum
+de OBS, unos 21,3 ms a 48 kHz.
+
+La preview reutiliza la textura Program que OBS ya ha renderizado: reduce a 320×180 en la GPU y lee a RAM como
+máximo dos veces por segundo, mapeando la transferencia en el siguiente frame de vídeo. No registra un consumidor
+de vídeo raw, no fuerza lecturas por frame a resolución completa ni mantiene `obs_video_active` activo por sí sola.
+Plegarla libera captura, recursos GPU e historial. Ocultar el panel completo conserva el historial de baja
+frecuencia para reabrirlo, pero detiene el repintado. Durante una pausa de grabación suspende la captura y conserva
+el historial necesario para reanudar. Si coexisten streaming y grabación, la preview sigue el streaming; en caso
+contrario sigue la grabación. No incluye la latencia del servidor, CDN ni reproductor.
+
+## Limitaciones deliberadas de la versión 1.1.2
 
 - **Transición:** el modo de producción es `Cut on keyframe`. La opción de fade aparece deshabilitada porque un crossfade real entre vídeo ya retrasado y vídeo vivo exige decodificar, componer y volver a codificar toda la señal. Eso contradice el objetivo de bajo consumo y puede degradar imagen y latencia.
 - **Empalme de audio:** el cambio entre el encoder principal y el auxiliar puede introducir un hueco muy breve de
   una o dos tramas AAC. No existe ya el silencio de varios segundos durante el llenado.
+- **Alineación del codec:** la reordenación B-frame y los límites de los paquetes AAC pueden añadir un pequeño
+  desfase A/V en el empalme. No es exacto por muestra; no se decodifica/recodifica Program para eliminarlo.
+- **Fallo de pausa nativo de OBS:** OBS 32.2.2 puede bloquearse tras pausar una grabación x264 con divisor de FPS 2,
+  también sin el plugin. Usa divisor 1 si necesitas pausar; el plugin no parchea los internos de OBS.
 - **Seguridad de audio:** una fuente compartida o una pista reservada que deje de ser exclusiva provoca silencio
   sólo en la escena de espera. El plugin no altera el routing global para intentar corregirlo automáticamente.
 - **Quitar delay:** la vuelta es inmediata en términos de control, pero el empalme efectivo espera el siguiente keyframe para mantener el stream decodificable. El máximo habitual es el intervalo GOP configurado.
@@ -161,7 +201,10 @@ a 48 kHz.
 - Se admiten outputs codificados con audio y vídeo. Hybrid MP4/MOV y RTMP normales son compatibles cuando
   tienen exactamente una pista de vídeo activa. No se admiten outputs raw, solo-audio, solo-vídeo, el delay
   nativo de OBS ni layouts con varias pistas de vídeo como `Enhanced Broadcasting`.
-- El binario Windows se compila y valida estructuralmente contra la distribución oficial de OBS 32.2.2; la prueba funcional completa de esta entrega se ha realizado en macOS arm64.
+- La recuperación segura tras huecos del encoder puede acortar el delay efectivo hasta un GOP alineado en lugar
+  de conservar un desfase A/V incorrecto. No se puede garantizar el delay exacto si faltan paquetes de origen.
+- La compatibilidad runtime de codecs y drivers requiere pruebas con OBS real; superar las suites sin SDK no
+  certifica por sí solo un flujo completo de grabación en Windows, macOS ni Linux.
 
 ## Arquitectura
 
@@ -181,7 +224,10 @@ LIVE → PREPARING → FILLING → DELAY ACTIVE → RETURNING LIVE → LIVE
                     ↘ cancelación ────────────────↗
 ```
 
-El núcleo puro en `src/core/` modela colas por pista, generaciones, límites y mapeo temporal sin depender de OBS. El adaptador de `src/output-session.cpp` aplica la misma estrategia a `encoder_packet` y gestiona las peculiaridades del lifecycle real de libobs.
+La máquina de estados de producción está en `src/output-session.cpp`; las pruebas compilan ese mismo archivo y
+ejercitan su callback de paquetes registrado con fronteras controladas de libobs y del encoder auxiliar. El modelo
+separado `src/core/packet_delay.cpp` no se enlaza al plugin y sus tests no demuestran el comportamiento de producción.
+En cambio, `src/core/preview-timing.hpp` y la FIFO PCM sí se usan en producción y se prueban directamente.
 
 APIs de OBS usadas como contrato:
 
@@ -212,7 +258,6 @@ Requiere Xcode 16 completo —no basta con Command Line Tools— y CMake 3.28 o 
 ```bash
 cmake --preset macos
 cmake --build --preset macos --config RelWithDebInfo --parallel
-cmake --build build_macos --target packet_delay_tests --config RelWithDebInfo --parallel
 ctest --test-dir build_macos --build-config RelWithDebInfo --output-on-failure
 ```
 
@@ -239,29 +284,41 @@ cmake --install build_x86_64 --prefix release/RelWithDebInfo
 ```
 
 Los workflows incluidos construyen y prueban macOS universal, Windows x64 y Ubuntu 24.04 x86_64 en GitHub
-Actions. Generan un ZIP para Windows, un PKG o `tar.xz` para macOS y un `tar.xz` más un paquete Debian para
-Linux. El tag de release debe coincidir con la versión de `buildspec.json`; se permiten sufijos de prerelease
+Actions. Las releases incluyen ZIP y PKG universales de macOS, ZIP de Windows, archivo y paquete Debian de Linux,
+símbolos de depuración, archivo de fuentes y `SHA256SUMS.txt`. El tag debe coincidir con la versión de
+`buildspec.json`; se permiten sufijos de prerelease
 como `-beta2` o `-rc1`.
 
-## Validación realizada
+## Validación de 1.1.2
 
-- 26 casos del núcleo de paquetes: delay exacto, cancelación, múltiples pistas, keyframes,
-  generaciones/rearmado, límites de memoria, timebases no unitarias y continuidad A/V.
-- 9 escenarios del puente de audio: FIFO acotada/concurrente, offsets positivos/negativos, discontinuidades,
-  fase 48 kHz, underrun y ausencia de drift.
-- Build estricto con warnings como errores.
-- Build nativo Linux x86_64 en Ubuntu 24.04 contra OBS Studio 32.2.0 y Qt 6.4.2; las dos suites pasan y
-  `ldd -r` no encuentra símbolos sin resolver.
-- Prueba de carga real del paquete Debian en OBS 32.2.0 bajo Docker/Xvfb/llvmpipe: el módulo 1.1.1 carga y
-  OBS completa el arranque. El cierre forzado por `SIGINT` del harness termina en segfault tanto con el plugin
-  como en el baseline sin él, por lo que ese entorno no se usa para certificar una descarga limpia.
-- ASan + UBSan y TSan sobre ambos núcleos, sin hallazgos.
-- Prueba real en OBS 32.2.2 macOS arm64: iniciar una grabación, cancelar durante `Preparing/Filling`, activar un
-  delay completo, cambiar Program de escena, abrir/cerrar el preview y volver a live sin detener el output.
-- Grabación de validación de 174,002 s: H.264 1920×1080 + AAC 48 kHz estéreo, decodificación completa sin
-  errores y 0 regresiones DTS en 10.425 paquetes de vídeo y 8.154 de audio.
-- Audio no silencioso medido durante ambas escenas de espera: −21,5 dB y −21,9 dB de volumen medio.
-- DLL Windows x64: formato PE32+ validado, ocho exports OBS presentes e imports resueltos contra la distribución oficial.
+Cinco suites sin SDK pasan en macOS con warnings como errores, ASan+UBSan y TSan:
+
+- **Casos de OutputSession de producción:** callbacks reales, referencias de paquetes, limpieza al
+  cancelar/rearmar, llenado según reloj de medios al pausar, reconexión con audio/vídeo primero, timestamps de
+  composición B-frame, huecos de vídeo o de pistas de audio durante Filling y Delayed, alineación multipista,
+  límites de RAM y fallback seguro.
+- **Casos de HoldPipeline de producción:** compartir layouts completos, encoders aislados, suscriptores tardíos,
+  pausa coordinada, bajas concurrentes y limpieza tras fallo de arranque, con una frontera de libobs controlada.
+- **5 casos de timing de preview** y **9 escenarios de FIFO de audio**, ambos de producción.
+- **26 casos del modelo separado de paquetes**, conservados como cobertura del modelo, no como prueba de la sesión
+  real.
+
+Ejecución sin SDK de OBS:
+
+```bash
+cmake -S tests -B build-tests -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-tests --parallel
+ctest --test-dir build-tests --output-on-failure
+```
+
+Los targets opcionales de integración `preview_gpu_integration` y `output_session_integration` usan libobs real y
+un backend gráfico. Se habilitan con `-DENABLE_OBS_INTEGRATION_TESTS=ON` al compilar con el SDK de OBS; son
+independientes de las cinco suites sin SDK y esos comandos CTest no los ejecutan automáticamente. Sus resultados
+runtime nativos deben comunicarse por separado; consulta la [validación de la release](releases/1.1.2.md#validación).
+
+La grabación de 174,002 segundos y las pruebas de arranque Linux con Docker/Xvfb/llvmpipe corresponden a **1.1.1**,
+no a 1.1.2. Sus resultados históricos y limitaciones siguen en las
+[notas de la versión 1.1.1](releases/1.1.1.md#validación).
 
 ## Licencia
 

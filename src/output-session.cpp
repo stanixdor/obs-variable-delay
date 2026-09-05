@@ -82,6 +82,12 @@ OutputSession::OutputSession(obs_output_t *output, std::string label, Notify not
 
 OutputSession::~OutputSession()
 {
+	if (lifecycleSignalsAttached_) {
+		signal_handler_t *signals = obs_output_get_signal_handler(output_);
+		signal_handler_disconnect(signals, "activate", &OutputSession::activate_signal, this);
+		signal_handler_disconnect(signals, "pause", &OutputSession::pause_signal, this);
+		signal_handler_disconnect(signals, "unpause", &OutputSession::pause_signal, this);
+	}
 	if (reconnectSignalAttached_) {
 		signal_handler_disconnect(obs_output_get_signal_handler(output_), "reconnect",
 					  &OutputSession::reconnect_signal, this);
@@ -153,6 +159,13 @@ bool OutputSession::attach(std::string &error)
 				       &OutputSession::reconnect_signal, this);
 		reconnectSignalAttached_ = true;
 	}
+	if (!lifecycleSignalsAttached_) {
+		signal_handler_t *signals = obs_output_get_signal_handler(output_);
+		signal_handler_connect(signals, "activate", &OutputSession::activate_signal, this);
+		signal_handler_connect(signals, "pause", &OutputSession::pause_signal, this);
+		signal_handler_connect(signals, "unpause", &OutputSession::pause_signal, this);
+		lifecycleSignalsAttached_ = true;
+	}
 	return true;
 }
 
@@ -168,6 +181,21 @@ bool OutputSession::request_delay(const uint32_t seconds, std::shared_ptr<HoldMe
 	}
 	if (!supported(error))
 		return false;
+
+	// A user can cancel and re-enable before the 100 ms maintenance tick.
+	// Stop the old collector before publishing a new generation, and never
+	// join encoder callbacks while holding the mutex those callbacks need.
+	std::unique_ptr<HoldPipeline> retiredPipeline;
+	{
+		std::scoped_lock lock(mutex_);
+		const DelayState current = state_.load(std::memory_order_relaxed);
+		if (current != DelayState::Bypass && current != DelayState::Error) {
+			error = "This output is already changing delay state.";
+			return false;
+		}
+		retiredPipeline = std::move(holdPipeline_);
+	}
+	retiredPipeline.reset();
 
 	{
 		std::scoped_lock lock(mutex_);
@@ -186,10 +214,16 @@ bool OutputSession::request_delay(const uint32_t seconds, std::shared_ptr<HoldMe
 		cleanupHoldRequested_ = false;
 		errorReturnPending_ = false;
 		pendingErrorDetail_.clear();
+		effectiveSeconds_ = 0.0;
 		activeAudioMask_ = 0;
-		holdGopStartNs_ = 0;
+		holdGopStartDtsUsec_ = 0;
+		holdPauseStateKnown_ = false;
 		primaryFormats_ = {};
 		holdFormats_ = {};
+		havePrimaryDts_ = {};
+		haveEmittedSourceDts_ = {};
+		primaryStepUsec_ = {};
+		realignmentPending_ = false;
 		for (std::size_t index = 0; index < MAX_OUTPUT_AUDIO_ENCODERS; ++index) {
 			if (obs_output_get_audio_encoder(output_, index))
 				activeAudioMask_ |= 1U << index;
@@ -211,6 +245,7 @@ bool OutputSession::request_delay(const uint32_t seconds, std::shared_ptr<HoldMe
 		cleanupHoldRequested_ = true;
 		return false;
 	}
+	sync_pause_state();
 
 	if (notify_)
 		notify_();
@@ -248,20 +283,22 @@ void OutputSession::request_bypass()
 
 void OutputSession::maintenance()
 {
+	sync_pause_state();
 	std::unique_ptr<HoldPipeline> pipeline;
-	std::array<PacketQueue, LaneCount> retiredPrimary;
-	std::array<PacketQueue, LaneCount> retiredHold;
-	std::array<ObsPacket, LaneCount> retiredPrimaryFallback;
-	std::array<ObsPacket, LaneCount> retiredHoldFallback;
 	{
 		std::scoped_lock lock(mutex_);
 		if (!cleanupHoldRequested_)
 			return;
 		cleanupHoldRequested_ = false;
 		pipeline = std::move(holdPipeline_);
+		holdPauseStateKnown_ = false;
 	}
 	if (pipeline)
 		pipeline->stop();
+	std::array<PacketQueue, LaneCount> retiredPrimary;
+	std::array<PacketQueue, LaneCount> retiredHold;
+	std::array<ObsPacket, LaneCount> retiredPrimaryFallback;
+	std::array<ObsPacket, LaneCount> retiredHoldFallback;
 	{
 		std::scoped_lock lock(mutex_);
 		const DelayState current = state_.load(std::memory_order_relaxed);
@@ -281,7 +318,7 @@ void OutputSession::maintenance()
 			bufferedBytes_ = 0;
 		if (retireHold) {
 			holdBufferedBytes_ = 0;
-			holdGopStartNs_ = 0;
+			holdGopStartDtsUsec_ = 0;
 		}
 	}
 }
@@ -293,10 +330,11 @@ std::size_t OutputSession::lane_for(const encoder_packet &packet) noexcept
 	return std::min<std::size_t>(packet.track_idx + 1, LaneCount - 1);
 }
 
-void OutputSession::packet_callback(obs_output_t *, encoder_packet *packet, encoder_packet_time *, void *param)
+void OutputSession::packet_callback(obs_output_t *, encoder_packet *packet, encoder_packet_time *packetTime,
+				    void *param)
 {
 	if (packet && param)
-		static_cast<OutputSession *>(param)->process_primary_packet(packet);
+		static_cast<OutputSession *>(param)->process_primary_packet(packet, packetTime);
 }
 
 void OutputSession::reconnect_signal(void *param, calldata_t *)
@@ -304,8 +342,75 @@ void OutputSession::reconnect_signal(void *param, calldata_t *)
 	auto *self = static_cast<OutputSession *>(param);
 	if (!self)
 		return;
-	self->reconnectRearmRequested_.store(true, std::memory_order_release);
+	self->reconnectResetPending_.store(true, std::memory_order_release);
 	self->request_bypass();
+}
+
+void OutputSession::activate_signal(void *param, calldata_t *)
+{
+	auto *self = static_cast<OutputSession *>(param);
+	if (!self || !self->reconnectResetPending_.exchange(false, std::memory_order_acq_rel))
+		return;
+	{
+		// libobs emits activate before making packet capture active. Reset
+		// here, before even AAC priming can reach the newly connected muxer.
+		std::scoped_lock lock(self->mutex_);
+		self->state_.store(DelayState::Bypass, std::memory_order_release);
+		self->reset_timeline_locked();
+		self->cleanupHoldRequested_ = true;
+		self->errorReturnPending_ = false;
+		self->pendingErrorDetail_.clear();
+		self->detail_ = "Live after reconnection";
+	}
+	self->reconnectRearmRequested_.store(true, std::memory_order_release);
+	if (self->notify_)
+		self->notify_();
+}
+
+void OutputSession::pause_signal(void *param, calldata_t *)
+{
+	auto *self = static_cast<OutputSession *>(param);
+	if (self)
+		self->pauseSyncRequested_.store(true, std::memory_order_release);
+}
+
+void OutputSession::sync_pause_state()
+{
+	obs_encoder_t *video = obs_output_get_video_encoder(output_);
+	const bool paused = obs_output_paused(output_) || (video && obs_encoder_paused(video));
+	HoldPipeline *pipeline = nullptr;
+	{
+		std::scoped_lock lock(mutex_);
+		const bool requested = pauseSyncRequested_.exchange(false, std::memory_order_relaxed);
+		paused_ = paused;
+		if (requested || !holdPauseStateKnown_ || paused != holdPaused_)
+			pipeline = holdPipeline_.get();
+	}
+	// Session control and maintenance run on the frontend thread. Signals
+	// only request work; pause may acquire libobs encoder locks here.
+	if (pipeline && pipeline->set_paused(paused)) {
+		std::scoped_lock lock(mutex_);
+		holdPaused_ = paused;
+		holdPauseStateKnown_ = true;
+	}
+}
+
+void OutputSession::reset_timeline_locked()
+{
+	timelineOffsetUsec_.store(0, std::memory_order_relaxed);
+	maxEmittedVideoPtsUsec_ = 0;
+	haveEmittedVideoPts_ = false;
+	latestPrimaryDtsUsec_ = 0;
+	fillStartDtsUsec_ = 0;
+	fillStartNs_ = 0;
+	effectiveSeconds_ = 0.0;
+	emittedVideoTimestampNs_.store(0, std::memory_order_relaxed);
+	havePrimaryDts_ = {};
+	haveEmittedSourceDts_ = {};
+	primaryStepUsec_ = {};
+	realignmentPending_ = false;
+	primaryFormats_ = {};
+	holdFormats_ = {};
 }
 
 void OutputSession::note_throughput(const std::size_t bytes, const uint64_t nowNs)
@@ -330,14 +435,151 @@ void OutputSession::note_throughput(const std::size_t bytes, const uint64_t nowN
 		notify_();
 }
 
-bool OutputSession::buffer_primary(encoder_packet *packet, const uint64_t nowNs)
+bool OutputSession::buffer_primary(encoder_packet *packet, const uint64_t nowNs, const int64_t rawDtsUsec)
 {
 	const std::size_t lane = lane_for(*packet);
 	if (packet->size > MaxPrimaryBufferBytes - std::min(bufferedBytes_, MaxPrimaryBufferBytes))
 		return false;
 	primaryQueues_[lane].emplace_back(packet, nowNs);
+	// Retain the original media timestamp for age/alignment decisions. The
+	// payload's PTS-DTS composition offset is unchanged by timeline bridges.
+	primaryQueues_[lane].back().get()->dts_usec = rawDtsUsec;
 	bufferedBytes_ += packet->size;
 	return true;
+}
+
+void OutputSession::note_primary_cadence_locked(const encoder_packet &packet, const int64_t rawDtsUsec)
+{
+	const std::size_t lane = lane_for(packet);
+	int64_t &step = primaryStepUsec_[lane];
+	if (step == 0) {
+		if (packet.type == OBS_ENCODER_VIDEO) {
+			// libobs already multiplies packet.timebase_num by the encoder's
+			// frame-rate divisor, in both CPU and GPU encoding paths.
+			step = std::max<int64_t>(1, ticks_to_usec(packet.timebase_num, 1, packet.timebase_den));
+		} else if (packet.encoder) {
+			const uint32_t rate = obs_encoder_get_sample_rate(packet.encoder);
+			const size_t frames = obs_encoder_get_frame_size(packet.encoder);
+			if (rate && frames)
+				step = static_cast<int64_t>(frames * 1'000'000ULL / rate);
+		}
+	}
+	if (havePrimaryDts_[lane] && rawDtsUsec > lastPrimaryDts_[lane]) {
+		const int64_t observedStep = rawDtsUsec - lastPrimaryDts_[lane];
+		if (step == 0)
+			step = observedStep;
+		// Arrival jitter does not count: only a hole in the encoder's media
+		// DTS does. AAC rounding and B-frame PTS reordering are harmless.
+		if (step > 0 && observedStep > step + std::max<int64_t>(2'000, step / 2))
+			realignmentPending_ = true;
+	}
+	lastPrimaryDts_[lane] = rawDtsUsec;
+	havePrimaryDts_[lane] = true;
+	if (packet.type == OBS_ENCODER_VIDEO && step > 0)
+		videoFrameDurationUsec_ = step;
+}
+
+void OutputSession::realign_primary_locked(encoder_packet *carrier, const int64_t rawDtsUsec)
+{
+	if (carrier->type != OBS_ENCODER_VIDEO || primaryQueues_[0].empty())
+		return;
+	const int64_t videoSource = primaryQueues_[0].front().get()->dts_usec;
+	if (haveEmittedSourceDts_[0] && primaryStepUsec_[0] > 0 &&
+	    videoSource - lastEmittedSourceDts_[0] >
+		    primaryStepUsec_[0] + std::max<int64_t>(2'000, primaryStepUsec_[0] / 2))
+		realignmentPending_ = true;
+	if (!realignmentPending_)
+		return;
+
+	const int64_t videoAge = rawDtsUsec - videoSource;
+	int64_t lowerBound = videoSource;
+	bool skewed = false;
+	for (std::size_t lane = 1; lane < LaneCount; ++lane) {
+		if ((activeAudioMask_ & (1U << (lane - 1))) == 0)
+			continue;
+		if (primaryQueues_[lane].empty() || !havePrimaryDts_[lane])
+			return;
+		const int64_t audioSource = primaryQueues_[lane].front().get()->dts_usec;
+		lowerBound = std::max(lowerBound, audioSource);
+		// The audio head is the NEXT packet; the last observed carrier has
+		// already consumed its predecessor. Include one nominal audio step.
+		const int64_t audioAge = lastPrimaryDts_[lane] + primaryStepUsec_[lane] - audioSource;
+		const int64_t tolerance =
+			std::max<int64_t>(4'000, 2 * std::max(primaryStepUsec_[0], primaryStepUsec_[lane]));
+		skewed = skewed || std::abs(videoAge - audioAge) > tolerance;
+	}
+	if (!skewed) {
+		realignmentPending_ = false;
+		return;
+	}
+
+	// Move all tracks forward to one independently decodable GOP. Never
+	// discard a reference frame and then emit its dependent P/B frames.
+	// Prefer a keyframe at/before the configured age, without replaying any
+	// audio already emitted. A lost carrier may make exact seconds
+	// impossible; effectiveSeconds reports the resulting age honestly.
+	const int64_t desired = rawDtsUsec - static_cast<int64_t>(targetSeconds_) * 1'000'000LL;
+	std::size_t chosen = primaryQueues_[0].size();
+	std::array<std::size_t, LaneCount> audioPositions{};
+	for (std::size_t index = 0; index < primaryQueues_[0].size(); ++index) {
+		const ObsPacket &packet = primaryQueues_[0][index];
+		if (!packet.keyframe() || packet.get()->dts_usec < lowerBound)
+			continue;
+		const int64_t candidateDts = packet.get()->dts_usec;
+		bool audioAligned = true;
+		bool beyondAvailableAudio = false;
+		for (std::size_t lane = 1; lane < LaneCount; ++lane) {
+			if ((activeAudioMask_ & (1U << (lane - 1))) == 0)
+				continue;
+			const PacketQueue &audio = primaryQueues_[lane];
+			auto &position = audioPositions[lane];
+			while (position < audio.size() && audio[position].get()->dts_usec < candidateDts)
+				++position;
+			if (position == audio.size()) {
+				audioAligned = false;
+				beyondAvailableAudio = true;
+				break;
+			}
+			if (audio[position].get()->dts_usec - candidateDts > primaryStepUsec_[lane] + 2'000) {
+				audioAligned = false;
+				break;
+			}
+		}
+		// An audio hole can straddle this GOP even when its queue has newer
+		// packets. Seek a later GOP that actually has matching audio on ALL
+		// tracks, rather than silently jumping one track past the video.
+		if (beyondAvailableAudio)
+			break;
+		if (!audioAligned)
+			continue;
+		if (chosen == primaryQueues_[0].size() || packet.get()->dts_usec <= desired)
+			chosen = index;
+		if (packet.get()->dts_usec >= desired)
+			break;
+	}
+	if (chosen == primaryQueues_[0].size())
+		return;
+	const int64_t origin = primaryQueues_[0][chosen].get()->dts_usec;
+	// Wait for each audio lane to actually contain the new origin before
+	// committing, so a cut cannot expose current/live audio accidentally.
+	for (std::size_t lane = 1; lane < LaneCount; ++lane) {
+		if ((activeAudioMask_ & (1U << (lane - 1))) != 0 &&
+		    primaryQueues_[lane].back().get()->dts_usec < origin)
+			return;
+	}
+	for (std::size_t lane = 0; lane < LaneCount; ++lane) {
+		auto &queue = primaryQueues_[lane];
+		while (!queue.empty() && queue.front().get()->dts_usec < origin) {
+			bufferedBytes_ -= queue.front().size();
+			queue.pop_front();
+		}
+		primaryFallbackPackets_[lane].reset();
+	}
+	haveEmittedSourceDts_ = {};
+	realignmentPending_ = false;
+	begin_timeline_epoch_locked(*carrier, &primaryQueues_[0].front());
+	obs_log(LOG_WARNING, "%s: recovered audio/video alignment at a complete buffered GOP (%.3f s delay)",
+		label_.c_str(), static_cast<double>(rawDtsUsec - origin) / 1'000'000.0);
 }
 
 void OutputSession::note_lane_format(std::array<LaneFormat, LaneCount> &formats, const encoder_packet &packet)
@@ -426,12 +668,13 @@ bool OutputSession::hold_preroll_ready_locked() const
 {
 	if (!holdReady_ || holdQueues_[0].empty() || !holdQueues_[0].front().keyframe())
 		return false;
-	if (holdQueues_[0].back().captured_at_ns() < holdGopStartNs_ + HoldPrerollNs)
+	const int64_t readyDts = holdGopStartDtsUsec_ + static_cast<int64_t>(HoldPrerollNs / 1000ULL);
+	if (holdQueues_[0].back().get()->dts_usec < readyDts)
 		return false;
 	for (std::size_t index = 0; index < MAX_OUTPUT_AUDIO_ENCODERS; ++index) {
 		if ((activeAudioMask_ & (1U << index)) != 0) {
 			const PacketQueue &queue = holdQueues_[index + 1];
-			if (queue.empty() || queue.back().captured_at_ns() < holdGopStartNs_ + HoldPrerollNs)
+			if (queue.empty() || queue.back().get()->dts_usec < readyDts)
 				return false;
 		}
 	}
@@ -466,6 +709,25 @@ bool OutputSession::replace_from(std::array<PacketQueue, LaneCount> &queues,
 		(*fallbackPackets)[lane] = ObsPacket(chosen->get(), chosen->captured_at_ns());
 
 	const std::size_t bytes = chosen->size();
+	if (!holdQueue) {
+		const int64_t sourceDts = chosen->get()->dts_usec;
+		if (haveEmittedSourceDts_[lane] && primaryStepUsec_[lane] > 0 &&
+		    sourceDts - lastEmittedSourceDts_[lane] >
+			    primaryStepUsec_[lane] + std::max<int64_t>(2'000, primaryStepUsec_[lane] / 2))
+			realignmentPending_ = true;
+		lastEmittedSourceDts_[lane] = sourceDts;
+		haveEmittedSourceDts_[lane] = true;
+		if (carrier->type == OBS_ENCODER_VIDEO) {
+			const uint64_t captured = chosen->captured_at_ns();
+			effectiveSeconds_ = currentVideoCaptureNs_ >= captured
+						    ? static_cast<double>(currentVideoCaptureNs_ - captured) /
+							      static_cast<double>(NsPerSecond)
+						    : 0.0;
+			emittedVideoTimestampNs_.store(captured, std::memory_order_relaxed);
+		}
+	} else if (carrier->type == OBS_ENCODER_VIDEO) {
+		emittedVideoTimestampNs_.store(0, std::memory_order_relaxed);
+	}
 	replace_packet_payload(carrier, *chosen);
 	if (fromQueue) {
 		queues[lane].pop_front();
@@ -483,32 +745,46 @@ bool OutputSession::replace_with_fallback(std::array<ObsPacket, LaneCount> &fall
 	ObsPacket &fallback = fallbackPackets[lane];
 	if (!fallback.valid() || !packets_compatible(*carrier, fallback))
 		return false;
+	if (carrier->type == OBS_ENCODER_VIDEO) {
+		const bool primary = &fallbackPackets == &primaryFallbackPackets_;
+		const uint64_t captured = fallback.captured_at_ns();
+		emittedVideoTimestampNs_.store(primary ? captured : 0, std::memory_order_relaxed);
+		if (primary)
+			effectiveSeconds_ = currentVideoCaptureNs_ >= captured
+						    ? static_cast<double>(currentVideoCaptureNs_ - captured) /
+							      static_cast<double>(NsPerSecond)
+						    : 0.0;
+	}
 	replace_packet_payload(carrier, fallback);
 	return true;
 }
 
-void OutputSession::process_primary_packet(encoder_packet *packet)
+void OutputSession::process_primary_packet(encoder_packet *packet, const encoder_packet_time *packetTime)
 {
 	if (!packet)
 		return;
 	const uint64_t nowNs = os_gettime_ns();
+	const uint64_t captureNs =
+		packetTime && packetTime->cts
+			? packetTime->cts
+			: (packet->sys_dts_usec > 0 ? static_cast<uint64_t>(packet->sys_dts_usec) * 1000ULL : nowNs);
 	note_throughput(packet->size, nowNs);
 	const DelayState observed = state_.load(std::memory_order_acquire);
 	if ((observed == DelayState::Bypass || observed == DelayState::Error) &&
-	    timelineOffsetUsec_.load(std::memory_order_relaxed) == 0)
+	    timelineOffsetUsec_.load(std::memory_order_relaxed) == 0) {
+		if (packet->type == OBS_ENCODER_VIDEO)
+			emittedVideoTimestampNs_.store(captureNs, std::memory_order_relaxed);
 		return;
+	}
 	bool notify = false;
 	std::scoped_lock lock(mutex_);
 	const int64_t rawDtsUsec = packet->dts_usec;
+	note_primary_cadence_locked(*packet, rawDtsUsec);
 	note_lane_format(primaryFormats_, *packet);
 	latestPrimaryDtsUsec_ = std::max(latestPrimaryDtsUsec_, rawDtsUsec);
 	if (packet->type == OBS_ENCODER_VIDEO) {
-		if (lastRawVideoDtsUsec_ != 0 && rawDtsUsec > lastRawVideoDtsUsec_) {
-			const int64_t duration = rawDtsUsec - lastRawVideoDtsUsec_;
-			if (duration < 1'000'000)
-				videoFrameDurationUsec_ = duration;
-		}
-		lastRawVideoDtsUsec_ = rawDtsUsec;
+		currentVideoCaptureNs_ = captureNs;
+		emittedVideoTimestampNs_.store(captureNs, std::memory_order_relaxed);
 	}
 	apply_timeline_offset_locked(*packet, timelineOffsetUsec_.load(std::memory_order_relaxed));
 	const auto finishPacket = [this, packet] {
@@ -517,6 +793,7 @@ void OutputSession::process_primary_packet(encoder_packet *packet)
 
 	DelayState current = state_.load(std::memory_order_relaxed);
 	if (current == DelayState::Bypass || current == DelayState::Error) {
+		effectiveSeconds_ = 0.0;
 		finishPacket();
 		return;
 	}
@@ -550,6 +827,7 @@ void OutputSession::process_primary_packet(encoder_packet *packet)
 		obs_log(completedWithError ? LOG_WARNING : LOG_INFO, "%s: live bypass restored%s", label_.c_str(),
 			completedWithError ? " after a safe error fallback" : "");
 		cleanupHoldRequested_ = true;
+		effectiveSeconds_ = 0.0;
 		notify = true;
 		finishPacket();
 		if (notify_)
@@ -558,7 +836,7 @@ void OutputSession::process_primary_packet(encoder_packet *packet)
 	}
 
 	if (current == DelayState::Filling) {
-		if (!buffer_primary(packet, nowNs)) {
+		if (!buffer_primary(packet, captureNs, rawDtsUsec)) {
 			returnFromFilling_ = true;
 			state_.store(DelayState::ReturningLive, std::memory_order_release);
 			detail_ = "RAM safety limit reached — waiting for a live keyframe";
@@ -584,6 +862,7 @@ void OutputSession::process_primary_packet(encoder_packet *packet)
 			obs_log(LOG_INFO, "%s: %u second delay active", label_.c_str(), targetSeconds_);
 			cleanupHoldRequested_ = true;
 			current = DelayState::Delayed;
+			haveEmittedSourceDts_ = {};
 			notify = true;
 			if (!replace_from(primaryQueues_, &primaryFallbackPackets_, packet, false)) {
 				const bool keptHold = replace_with_fallback(holdFallbackPackets_, packet);
@@ -609,7 +888,7 @@ void OutputSession::process_primary_packet(encoder_packet *packet)
 			}
 		}
 	} else if (current == DelayState::Delayed) {
-		if (!buffer_primary(packet, nowNs)) {
+		if (!buffer_primary(packet, captureNs, rawDtsUsec)) {
 			returnFromFilling_ = false;
 			drainPrimaryOnReturn_ = true;
 			state_.store(DelayState::ReturningLive, std::memory_order_release);
@@ -635,6 +914,7 @@ void OutputSession::process_primary_packet(encoder_packet *packet)
 				notify_();
 			return;
 		}
+		realign_primary_locked(packet, rawDtsUsec);
 		bool usedFallback = false;
 		if (!replace_from(primaryQueues_, &primaryFallbackPackets_, packet, false, &usedFallback)) {
 			return_live_with_error_locked("Delay buffer underrun; returning to live safely.", false);
@@ -656,7 +936,7 @@ void OutputSession::process_primary_packet(encoder_packet *packet)
 			if (!replace_from(holdQueues_, &holdFallbackPackets_, packet, true))
 				return_live_with_error_locked("Hold encoder underrun while cancelling.", true);
 		} else {
-			if (!drainPrimaryOnReturn_ && !buffer_primary(packet, nowNs)) {
+			if (!drainPrimaryOnReturn_ && !buffer_primary(packet, captureNs, rawDtsUsec)) {
 				drainPrimaryOnReturn_ = true;
 				detail_ = "RAM safety limit reached — draining until a live keyframe";
 				notify = true;
@@ -698,10 +978,10 @@ void OutputSession::receive_hold_packet(encoder_packet *packet)
 						     : 0;
 			holdQueues_[0].pop_front();
 		}
-		holdGopStartNs_ = nowNs;
+		holdGopStartDtsUsec_ = packet->dts_usec;
 		for (std::size_t audioLane = 1; audioLane < LaneCount; ++audioLane) {
 			while (!holdQueues_[audioLane].empty() &&
-			       holdQueues_[audioLane].front().captured_at_ns() < holdGopStartNs_) {
+			       holdQueues_[audioLane].front().get()->dts_usec < holdGopStartDtsUsec_) {
 				holdBufferedBytes_ =
 					holdBufferedBytes_ >= holdQueues_[audioLane].front().size()
 						? holdBufferedBytes_ - holdQueues_[audioLane].front().size()
@@ -778,7 +1058,7 @@ void OutputSession::clear_hold_buffer()
 	for (auto &packet : holdFallbackPackets_)
 		packet.reset();
 	holdBufferedBytes_ = 0;
-	holdGopStartNs_ = 0;
+	holdGopStartDtsUsec_ = 0;
 }
 
 void OutputSession::set_error_locked(std::string message)
@@ -860,10 +1140,14 @@ DelaySnapshot OutputSession::snapshot() const
 	result.measuredMegabitsPerSecond = measuredBytesPerSecond * 8.0 / 1'000'000.0;
 	result.estimatedBytes = estimated_bytes(targetSeconds_, &result.estimateAvailable);
 	result.activeOutputs = 1;
+	result.emittedVideoTimestampNs = emittedVideoTimestampNs_.load(std::memory_order_relaxed);
+	result.bufferStartTimestampNs = primaryQueues_[0].empty() ? 0 : primaryQueues_[0].front().captured_at_ns();
+	result.paused = paused_;
 	result.emittingHold = result.state == DelayState::Filling ||
 			      (result.state == DelayState::ReturningLive && returnFromFilling_);
 	result.emittingDelayed = result.state == DelayState::Delayed ||
 				 (result.state == DelayState::ReturningLive && !returnFromFilling_);
+	result.effectiveSeconds = result.emittingDelayed ? effectiveSeconds_ : 0.0;
 	result.detail = detail_;
 	if (result.state == DelayState::Filling && fillStartNs_ != 0 && targetSeconds_ != 0) {
 		const double elapsed =

@@ -50,6 +50,8 @@ public:
 	[[nodiscard]] obs_source_t *active_audio_child() const noexcept;
 	[[nodiscard]] HoldAudioMode mode() const noexcept;
 
+	// Called from audio_output's input callback: libobs has already cleared
+	// every mix plane, so gaps and Silence require no additional zeroing.
 	bool pull(uint64_t callbackStartNs, uint64_t *newTimestampNs, uint32_t activeMixers, audio_output_data *mixes,
 		  std::size_t channels, uint32_t sampleRate) noexcept;
 

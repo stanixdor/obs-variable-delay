@@ -1,18 +1,16 @@
 #pragma once
 
-#include <obs.h>
+#include "preview-capture.hpp"
 
-#include <QImage>
 #include <QWidget>
 
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <deque>
-#include <mutex>
 
 class QLabel;
 class QTimer;
+class QHideEvent;
+class QShowEvent;
 
 namespace dynamic_delay {
 
@@ -26,32 +24,26 @@ class AudiencePreviewWidget final : public QWidget {
 public:
 	explicit AudiencePreviewWidget(DelayController &controller, QWidget *parent = nullptr);
 	~AudiencePreviewWidget() override;
-
 	void set_enabled(bool enabled);
+
+protected:
+	void hideEvent(QHideEvent *event) override;
+	void showEvent(QShowEvent *event) override;
 
 private slots:
 	void present_frame();
 
 private:
-	struct PreviewFrame {
-		uint64_t capturedAtNs = 0;
-		QImage image;
-	};
-
-	static void video_frame(void *param, video_data *frame);
-	void receive_frame(video_data *frame);
+	void update_history_limit();
 	bool start_capture();
-	void stop_capture();
-
 	DelayController &controller_;
 	QLabel *imageLabel_ = nullptr;
 	QLabel *captionLabel_ = nullptr;
 	QTimer *timer_ = nullptr;
-	std::mutex framesMutex_;
-	std::deque<PreviewFrame> frames_;
-	std::atomic<uint32_t> delaySeconds_{30};
-	uint64_t captureStartedNs_ = 0;
-	bool connected_ = false;
+	PreviewCapture capture_;
+	qint64 lastPresentedKey_ = 0;
+	QSize lastPresentedSize_;
+	bool enabled_ = false;
 };
 
 } // namespace dynamic_delay

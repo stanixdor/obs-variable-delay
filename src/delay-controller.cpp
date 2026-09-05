@@ -220,6 +220,7 @@ DelaySnapshot DelayController::snapshot() const
 	aggregate.configuredSeconds = settings_.delaySeconds;
 	aggregate.state = DelayState::Bypass;
 	aggregate.activeOutputs = sessions_.size();
+	aggregate.outputTimings.reserve(sessions_.size());
 	aggregate.estimateAvailable = !sessions_.empty();
 	if (settings_.previewExpanded)
 		aggregate.estimatedBytes += audience_preview_estimated_bytes(settings_.delaySeconds);
@@ -239,6 +240,9 @@ DelaySnapshot DelayController::snapshot() const
 	double progressTotal = 0.0;
 	for (const auto &[_, session] : sessions_) {
 		const DelaySnapshot current = session->snapshot();
+		aggregate.outputTimings.push_back({session->label(), current.state, current.effectiveSeconds,
+						   current.emittedVideoTimestampNs, current.bufferStartTimestampNs,
+						   current.emittingHold, current.emittingDelayed, current.paused});
 		aggregate.bufferedBytes += current.bufferedBytes;
 		bool estimateAvailable = false;
 		aggregate.estimatedBytes += session->estimated_bytes(settings_.delaySeconds, &estimateAvailable);
@@ -246,6 +250,13 @@ DelaySnapshot DelayController::snapshot() const
 		aggregate.measuredMegabitsPerSecond += current.measuredMegabitsPerSecond;
 		aggregate.emittingHold = aggregate.emittingHold || current.emittingHold;
 		aggregate.emittingDelayed = aggregate.emittingDelayed || current.emittingDelayed;
+		// Streaming is the audience view when both outputs are present.
+		if (session->label() == "Streaming" || aggregate.outputTimings.size() == 1) {
+			aggregate.effectiveSeconds = current.effectiveSeconds;
+			aggregate.emittedVideoTimestampNs = current.emittedVideoTimestampNs;
+			aggregate.bufferStartTimestampNs = current.bufferStartTimestampNs;
+			aggregate.paused = current.paused;
+		}
 		progressTotal += current.progress;
 		if (state_rank(current.state) > state_rank(aggregate.state)) {
 			aggregate.state = current.state;
@@ -336,6 +347,13 @@ void DelayController::handle_frontend_event(const enum obs_frontend_event event)
 	case OBS_FRONTEND_EVENT_STREAMING_STARTING:
 	case OBS_FRONTEND_EVENT_RECORDING_STARTING:
 		break;
+	case OBS_FRONTEND_EVENT_RECORDING_PAUSED:
+	case OBS_FRONTEND_EVENT_RECORDING_UNPAUSED: {
+		std::scoped_lock lock(mutex_);
+		for (auto &[_, session] : sessions_)
+			session->sync_pause_state();
+		break;
+	}
 	case OBS_FRONTEND_EVENT_STREAMING_STOPPED: {
 		obs_output_t *output = obs_frontend_get_streaming_output();
 		remove_output(output, "Streaming");
@@ -469,7 +487,7 @@ void DelayController::start_delay_on_output(obs_output_t *output)
 		std::scoped_lock lock(mutex_);
 		auto it = sessions_.find(output);
 		if (requestedActive_ && !rearmPending_ && it != sessions_.end() && obs_output_active(output) &&
-		    it->second->is_bypass()) {
+		    !obs_output_reconnecting(output) && it->second->is_bypass()) {
 			std::string error;
 			if (!it->second->request_delay(settings_.delaySeconds, mediaHub, error)) {
 				obs_log(LOG_ERROR, "%s delay activation failed: %s", it->second->label().c_str(),
@@ -700,7 +718,8 @@ void DelayController::start_delay_on_sessions()
 		for (auto &[_, session] : sessions_) {
 			if (cancelled)
 				break;
-			if (!obs_output_active(session->output()) || !session->is_bypass())
+			if (!obs_output_active(session->output()) || obs_output_reconnecting(session->output()) ||
+			    !session->is_bypass())
 				continue;
 			std::string error;
 			if (!session->request_delay(seconds, mediaHub, error)) {
@@ -885,7 +904,7 @@ void DelayController::poll()
 				it = reconnectPending_.erase(it);
 				continue;
 			}
-			if (!rearmPending_ && session->second->is_bypass()) {
+			if (!rearmPending_ && session->second->is_bypass() && !obs_output_reconnecting(*it)) {
 				reconnectReady.push_back(*it);
 				it = reconnectPending_.erase(it);
 				continue;

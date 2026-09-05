@@ -26,8 +26,9 @@ import {notFound} from "next/navigation";
 
 import type {Locale} from "@/i18n/routing";
 import {routing} from "@/i18n/routing";
+import packageInfo from "../../../package.json";
 
-const version = "1.1.1";
+const version = packageInfo.version;
 const repositoryUrl = "https://github.com/stanixdor/obs-variable-delay";
 const releaseUrl = `${repositoryUrl}/releases/latest`;
 const releaseAssetBase = `${repositoryUrl}/releases/download/${version}`;

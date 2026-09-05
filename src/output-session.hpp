@@ -33,6 +33,7 @@ public:
 	bool attach(std::string &error);
 	bool request_delay(uint32_t seconds, std::shared_ptr<HoldMediaHub> mediaHub, std::string &error);
 	void request_bypass();
+	void sync_pause_state();
 	void maintenance();
 	void receive_hold_packet(encoder_packet *packet);
 	[[nodiscard]] bool take_rearm_request() noexcept
@@ -65,8 +66,10 @@ private:
 	static void packet_callback(obs_output_t *output, encoder_packet *packet, encoder_packet_time *packetTime,
 				    void *param);
 	static void reconnect_signal(void *param, calldata_t *data);
-	void process_primary_packet(encoder_packet *packet);
-	bool buffer_primary(encoder_packet *packet, uint64_t nowNs);
+	static void activate_signal(void *param, calldata_t *data);
+	static void pause_signal(void *param, calldata_t *data);
+	void process_primary_packet(encoder_packet *packet, const encoder_packet_time *packetTime);
+	bool buffer_primary(encoder_packet *packet, uint64_t nowNs, int64_t rawDtsUsec);
 	bool replace_from(std::array<PacketQueue, LaneCount> &queues, std::array<ObsPacket, LaneCount> *fallbackPackets,
 			  encoder_packet *carrier, bool holdQueue, bool *usedFallback = nullptr);
 	bool replace_with_fallback(std::array<ObsPacket, LaneCount> &fallbackPackets, encoder_packet *carrier);
@@ -77,6 +80,9 @@ private:
 	void apply_timeline_offset_locked(encoder_packet &packet, int64_t offsetUsec);
 	void begin_timeline_epoch_locked(encoder_packet &carrier, const ObsPacket *replacement);
 	void note_emitted_video_locked(const encoder_packet &packet);
+	void reset_timeline_locked();
+	void note_primary_cadence_locked(const encoder_packet &packet, int64_t rawDtsUsec);
+	void realign_primary_locked(encoder_packet *carrier, int64_t rawDtsUsec);
 	void clear_primary_buffer();
 	void clear_hold_buffer();
 	void set_error_locked(std::string message);
@@ -97,11 +103,15 @@ private:
 	std::array<ObsPacket, LaneCount> holdFallbackPackets_;
 	std::array<LaneFormat, LaneCount> primaryFormats_{};
 	std::array<LaneFormat, LaneCount> holdFormats_{};
+	std::array<int64_t, LaneCount> lastPrimaryDts_{};
+	std::array<int64_t, LaneCount> primaryStepUsec_{};
+	std::array<int64_t, LaneCount> lastEmittedSourceDts_{};
+	std::array<bool, LaneCount> havePrimaryDts_{};
+	std::array<bool, LaneCount> haveEmittedSourceDts_{};
 	std::unique_ptr<HoldPipeline> holdPipeline_;
 	uint64_t fillStartNs_ = 0;
 	int64_t fillStartDtsUsec_ = 0;
 	int64_t latestPrimaryDtsUsec_ = 0;
-	int64_t lastRawVideoDtsUsec_ = 0;
 	int64_t videoFrameDurationUsec_ = 16'667;
 	int64_t maxEmittedVideoPtsUsec_ = 0;
 	std::atomic<uint64_t> observedWindowStartNs_{0};
@@ -111,9 +121,14 @@ private:
 	std::size_t holdBufferedBytes_ = 0;
 	uint32_t targetSeconds_ = 0;
 	uint32_t activeAudioMask_ = 0;
-	uint64_t holdGopStartNs_ = 0;
+	int64_t holdGopStartDtsUsec_ = 0;
 	bool callbackAttached_ = false;
 	bool reconnectSignalAttached_ = false;
+	bool lifecycleSignalsAttached_ = false;
+	bool paused_ = false;
+	bool holdPauseStateKnown_ = false;
+	bool holdPaused_ = false;
+	bool realignmentPending_ = false;
 	bool holdReady_ = false;
 	bool returnFromFilling_ = false;
 	bool drainPrimaryOnReturn_ = false;
@@ -121,7 +136,12 @@ private:
 	bool haveEmittedVideoPts_ = false;
 	bool errorReturnPending_ = false;
 	std::atomic_bool reconnectRearmRequested_{false};
+	std::atomic_bool reconnectResetPending_{false};
+	std::atomic_bool pauseSyncRequested_{false};
 	std::atomic<int64_t> timelineOffsetUsec_{0};
+	double effectiveSeconds_ = 0.0;
+	uint64_t currentVideoCaptureNs_ = 0;
+	std::atomic<uint64_t> emittedVideoTimestampNs_{0};
 	std::string detail_;
 	std::string pendingErrorDetail_;
 };

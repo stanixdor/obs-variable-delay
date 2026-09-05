@@ -248,7 +248,11 @@ void DelayDock::apply_snapshot(const DelaySnapshot &snapshot)
 		color = QStringLiteral("#4b9cff");
 	else if (snapshot.state == DelayState::Error)
 		color = QStringLiteral("#ef5350");
-	statusDot_->setStyleSheet(QStringLiteral("color: %1;").arg(color));
+	const int colorState = static_cast<int>(snapshot.state);
+	if (colorState != lastStatusColor_) {
+		statusDot_->setStyleSheet(QStringLiteral("color: %1;").arg(color));
+		lastStatusColor_ = colorState;
+	}
 
 	const bool active = controller_.requested_active();
 	toggleButton_->setText(active ? tr("Remove delay / cancel") : tr("Add delay"));

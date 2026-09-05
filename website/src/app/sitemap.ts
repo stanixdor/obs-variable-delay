@@ -1,7 +1,7 @@
 import type {MetadataRoute} from "next";
 
 const siteUrl = "https://www.obsdelay.com";
-const releaseDate = new Date("2026-09-01T00:00:00.000Z");
+const releaseDate = new Date("2026-09-05T00:00:00.000Z");
 const languageAlternates = {
   en: `${siteUrl}/en`,
   es: `${siteUrl}/es`,

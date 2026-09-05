@@ -35,7 +35,7 @@
     },
     "name": "obs-dynamic-delay",
     "displayName": "OBS Dynamic Delay",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "author": "Aritz",
     "website": "https://www.obsdelay.com",
     "email": "stanixdor@users.noreply.github.com"

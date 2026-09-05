@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace dynamic_delay {
 
@@ -49,6 +50,23 @@ struct DelaySnapshot {
 	std::size_t activeOutputs = 0;
 	bool emittingHold = false;
 	bool emittingDelayed = false;
+	// Actual age of the emitted video, independent of a slider change or
+	// keyframe-aligned recovery after an encoder drops frames.
+	double effectiveSeconds = 0.0;
+	uint64_t emittedVideoTimestampNs = 0;
+	uint64_t bufferStartTimestampNs = 0;
+	bool paused = false;
+	struct OutputTiming {
+		std::string label;
+		DelayState state = DelayState::Bypass;
+		double effectiveSeconds = 0.0;
+		uint64_t emittedVideoTimestampNs = 0;
+		uint64_t bufferStartTimestampNs = 0;
+		bool emittingHold = false;
+		bool emittingDelayed = false;
+		bool paused = false;
+	};
+	std::vector<OutputTiming> outputTimings;
 	std::string detail;
 };
 
