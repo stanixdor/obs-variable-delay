@@ -34,6 +34,9 @@ target_include_directories(
   PRIVATE vendor/happy-eyeballs
 )
 target_compile_definitions(dynamic-delay-rtmp PUBLIC USE_MBEDTLS CRYPTO)
+# Preserve the pinned upstream C sources; OBS's Xcode warning policy also
+# enables -Wcomma globally, including the intentional TEA cipher loop.
+target_compile_options(dynamic-delay-rtmp PRIVATE $<$<COMPILE_LANG_AND_ID:C,Clang,AppleClang>:-Wno-comma>)
 target_link_libraries(
   dynamic-delay-rtmp
   PUBLIC
@@ -47,7 +50,10 @@ target_link_libraries(
 if(APPLE)
   target_link_libraries(dynamic-delay-rtmp PRIVATE "-framework Security" "-framework Foundation")
 elseif(WIN32)
-  target_link_libraries(dynamic-delay-rtmp PRIVATE crypt32 ws2_32 iphlpapi winmm)
+  target_link_libraries(
+    dynamic-delay-rtmp
+    PRIVATE bcrypt crypt32 ws2_32 iphlpapi winmm
+  )
   if(TARGET OBS::w32-pthreads)
     target_link_libraries(dynamic-delay-rtmp PRIVATE OBS::w32-pthreads)
   endif()

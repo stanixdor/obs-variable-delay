@@ -110,7 +110,29 @@ if(ENABLE_TESTS)
 endif()
 
 if(ENABLE_OBS_INTEGRATION_TESTS)
+  enable_testing()
   find_package(Qt6 REQUIRED COMPONENTS Gui)
+  add_executable(multistream_network_tests tests/multistream_network_tests.cpp src/multistream-transport.cpp)
+  target_compile_features(multistream_network_tests PRIVATE cxx_std_20)
+  target_compile_definitions(multistream_network_tests PRIVATE DYNAMIC_DELAY_TRANSPORT_TESTING)
+  target_include_directories(multistream_network_tests PRIVATE src vendor)
+  target_include_directories(multistream_network_tests SYSTEM PRIVATE "${DELAY_AV_INCLUDE_DIR}")
+  target_link_libraries(
+    multistream_network_tests
+    PRIVATE
+      dynamic-delay-rtmp
+      Qt6::Core
+      Qt6::Network
+      "${DELAY_avformat_LIBRARY}"
+      "${DELAY_avcodec_LIBRARY}"
+      "${DELAY_avutil_LIBRARY}"
+  )
+  set(MULTISTREAM_TEST_QT_PLUGINS "" CACHE PATH "Qt TLS plugins for isolated loopback integration tests")
+  add_test(NAME multistream_network_tests COMMAND multistream_network_tests "${MULTISTREAM_TEST_QT_PLUGINS}")
+  set_tests_properties(multistream_network_tests PROPERTIES TIMEOUT 25)
+  if(APPLE AND OBS_LOCAL_APP_SDK)
+    target_link_options(multistream_network_tests PRIVATE "LINKER:-rpath,${OBS_APP}/Contents/Frameworks")
+  endif()
   add_executable(preview_gpu_integration tests/preview_gpu_integration.cpp src/preview-capture.cpp)
   target_compile_features(preview_gpu_integration PRIVATE cxx_std_20)
   target_include_directories(preview_gpu_integration PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}")

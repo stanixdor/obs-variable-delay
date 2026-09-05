@@ -2,6 +2,10 @@
 
 #include "core/multistream-queue.hpp"
 
+#if defined(_WIN32) && !defined(NOMINMAX)
+#define NOMINMAX
+#endif
+
 extern "C" {
 #include <libavcodec/packet.h>
 #include <libavformat/avformat.h>
@@ -50,6 +54,9 @@ using namespace std::chrono_literals;
 constexpr uint64_t ConnectTimeoutUsec = 5'000'000;
 constexpr uint64_t WriteTimeoutUsec = 1'000'000;
 constexpr std::size_t MaxFlvTagBytes = 16U * 1024U * 1024U;
+#ifdef DYNAMIC_DELAY_TRANSPORT_TESTING
+std::atomic_bool failNextWorker{false};
+#endif
 #ifdef _WIN32
 constexpr SOCKET InvalidSocket = INVALID_SOCKET;
 using SocketLength = int;
@@ -242,8 +249,15 @@ bool target_valid(const MultistreamTarget &target)
 		return false;
 	const QUrl url(QString::fromStdString(target.server), QUrl::StrictMode);
 	return url.isValid() && (url.scheme() == QStringLiteral("rtmp") || url.scheme() == QStringLiteral("rtmps")) &&
-	       !url.host().isEmpty() && url.userInfo().isEmpty() && !url.hasFragment() && url.port(1935) > 0 &&
-	       url.port(1935) <= 65535;
+	       !url.host().isEmpty() && QUrl::toAce(url.host()).size() < 254 && url.userInfo().isEmpty() &&
+	       !url.hasFragment() && url.port(1935) > 0 && url.port(1935) <= 65535;
+}
+
+QString ascii_hostname(const QUrl &url)
+{
+	const QString hostname = url.host();
+	QHostAddress literal;
+	return literal.setAddress(hostname) ? hostname : QString::fromLatin1(QUrl::toAce(hostname));
 }
 
 class Destination final {
@@ -343,7 +357,11 @@ private:
 	{
 		return static_cast<Destination *>(opaque)->interrupted() ? 1 : 0;
 	}
+#if LIBAVFORMAT_VERSION_MAJOR >= 61
 	static int write_callback(void *opaque, const uint8_t *bytes, const int size)
+#else
+	static int write_callback(void *opaque, uint8_t *bytes, const int size)
+#endif
 	{
 		try {
 			return static_cast<Destination *>(opaque)->write_flv(bytes, size);
@@ -393,7 +411,13 @@ private:
 		if (!rtmp_)
 			return false;
 		RTMP_Init(rtmp_);
-		serverBuffer_.assign(target_.server.begin(), target_.server.end());
+		QUrl url(QString::fromStdString(target_.server), QUrl::StrictMode);
+		// librtmp expects an ASCII URL and a slash after an IPv6 authority.
+		// QUrl also provides the same canonical IDN hostname to DNS and TLS.
+		if (url.path().isEmpty())
+			url.setPath(QStringLiteral("/"));
+		const auto encodedUrl = url.toEncoded(QUrl::FullyEncoded);
+		serverBuffer_.assign(encodedUrl.begin(), encodedUrl.end());
 		serverBuffer_.push_back('\0');
 		if (!RTMP_SetupURL(rtmp_, serverBuffer_.data()))
 			return false;
@@ -401,8 +425,7 @@ private:
 		RTMP_AddStream(rtmp_, target_.key.c_str());
 		rtmp_->Link.receiveTimeout = 1;
 		rtmp_->Link.sendTimeout = 1;
-		const QUrl url(QString::fromStdString(target_.server), QUrl::StrictMode);
-		const auto addresses = resolve_host(url.host(), [this] { return interrupted(); });
+		const auto addresses = resolve_host(ascii_hostname(url), [this] { return interrupted(); });
 		SOCKET connected = InvalidSocket;
 		for (const QHostAddress &address : addresses) {
 			connected = connect_address(address, rtmp_->Link.port, [this] { return interrupted(); });
@@ -543,6 +566,10 @@ private:
 	void run() noexcept
 	{
 		try {
+#ifdef DYNAMIC_DELAY_TRANSPORT_TESTING
+			if (failNextWorker.exchange(false, std::memory_order_acq_rel))
+				throw std::bad_alloc();
+#endif
 			uint32_t backoffSeconds = 1;
 			while (!stop_.load(std::memory_order_acquire)) {
 				restart_.store(false, std::memory_order_release);
@@ -563,7 +590,7 @@ private:
 						int64_t epoch = 0;
 						{
 							std::unique_lock lock(mutex_);
-							condition_.wait_for(lock, 100ms, [&] {
+							condition_.wait(lock, [&] {
 								return interrupted() || !queue_.empty();
 							});
 							if (interrupted())
@@ -603,6 +630,10 @@ private:
 		} catch (...) {
 			close_connection();
 			try {
+				{
+					std::scoped_lock lock(mutex_);
+					queue_.reset();
+				}
 				set_status(MultistreamState::Error,
 					   "Destination stopped after an internal transport error");
 			} catch (...) {
@@ -635,10 +666,22 @@ private:
 
 } // namespace
 
+#ifdef DYNAMIC_DELAY_TRANSPORT_TESTING
+// Only the standalone boundary-test target defines this symbol. No fault
+// injection entry point or branch is compiled into the distributed plugin.
+void multistream_test_fail_next_worker() noexcept
+{
+	failNextWorker.store(true, std::memory_order_release);
+}
+#endif
+
 class MultistreamTransport::Impl final {
 public:
 	Impl()
 	{
+		// start caps active + retiring workers at sixteen, so stopping never
+		// needs to allocate a retirement slot, including during destruction.
+		retired_.reserve(16);
 #ifdef _WIN32
 		WSADATA data{};
 		winsockReady_ = WSAStartup(MAKEWORD(2, 2), &data) == 0;
@@ -664,6 +707,7 @@ public:
 				// here cannot wait for network/DNS and releases keys promptly.
 				std::erase_if(retired_,
 					      [](const auto &destination) { return destination->finished(); });
+				collect_finished();
 			}
 		});
 	}
@@ -704,6 +748,7 @@ public:
 #endif
 		std::scoped_lock lock(mutex_);
 		std::erase_if(retired_, [](const auto &destination) { return destination->finished(); });
+		collect_finished();
 		if (destinations_.contains(target.id) || destinations_.size() >= 8 ||
 		    destinations_.size() + retired_.size() >= 16) {
 			error = "This destination is already active, or the eight-destination limit was reached";
@@ -713,6 +758,7 @@ public:
 			auto destination = std::make_shared<Destination>(target, description);
 			destinations_.emplace(target.id, destination);
 			destination->start();
+			terminalStatuses_.erase(target.id);
 		} catch (...) {
 			destinations_.erase(target.id);
 			error = "Could not create the destination worker";
@@ -725,6 +771,7 @@ public:
 	void stop(const std::string &id)
 	{
 		std::scoped_lock lock(mutex_);
+		terminalStatuses_.erase(id);
 		const auto found = destinations_.find(id);
 		if (found == destinations_.end())
 			return;
@@ -742,6 +789,7 @@ public:
 			retired_.push_back(std::move(destination));
 		}
 		destinations_.clear();
+		terminalStatuses_.clear();
 		std::erase_if(retired_, [](const auto &destination) { return destination->finished(); });
 	}
 	void submit(const SharedEncodedPacket &packet)
@@ -756,23 +804,47 @@ public:
 	{
 		std::scoped_lock lock(mutex_);
 		std::vector<MultistreamStatus> result;
-		result.reserve(destinations_.size());
+		result.reserve(destinations_.size() + terminalStatuses_.size());
 		for (const auto &[id, destination] : destinations_) {
 			(void)id;
 			result.push_back(destination->snapshot());
+		}
+		for (const auto &[id, status] : terminalStatuses_) {
+			(void)id;
+			result.push_back(status);
 		}
 		return result;
 	}
 	bool active() const
 	{
 		std::scoped_lock lock(mutex_);
-		return !destinations_.empty();
+		return std::any_of(destinations_.begin(), destinations_.end(),
+				   [](const auto &entry) { return !entry.second->finished(); });
 	}
 
 private:
+	void collect_finished()
+	{
+		std::erase_if(destinations_, [this](const auto &entry) {
+			if (!entry.second->finished())
+				return false;
+			try {
+				// Retain only the safe UI diagnostic, not credentials,
+				// codec headers, payloads, or a terminated worker.
+				if (terminalStatuses_.size() >= 8)
+					terminalStatuses_.erase(terminalStatuses_.begin());
+				terminalStatuses_.insert_or_assign(entry.first, entry.second->snapshot());
+			} catch (...) {
+				// Allocation failure must still release the failed worker.
+			}
+			return true;
+		});
+	}
+
 	mutable std::mutex mutex_;
 	std::condition_variable wake_;
 	std::unordered_map<std::string, std::shared_ptr<Destination>> destinations_;
+	std::unordered_map<std::string, MultistreamStatus> terminalStatuses_;
 	std::vector<std::shared_ptr<Destination>> retired_;
 	std::thread watchdog_;
 	bool shuttingDown_ = false;

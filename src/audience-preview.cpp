@@ -96,10 +96,7 @@ void AudiencePreviewWidget::update_history_limit()
 {
 	const DelaySnapshot snapshot = controller_.snapshot();
 	if (!snapshot.outputTimings.empty()) {
-		auto output = std::find_if(snapshot.outputTimings.begin(), snapshot.outputTimings.end(),
-					   [](const auto &timing) { return timing.label == "Streaming"; });
-		if (output == snapshot.outputTimings.end())
-			output = snapshot.outputTimings.begin();
+		const auto output = core::preview_output(snapshot.outputTimings.begin(), snapshot.outputTimings.end());
 		capture_.set_history_seconds(
 			core::preview_history_seconds(snapshot.configuredSeconds, output->effectiveSeconds));
 		capture_.set_playback_state(output->paused, output->emittingHold, output->emittingDelayed,
@@ -122,10 +119,7 @@ void AudiencePreviewWidget::present_frame()
 	double effectiveSeconds = snapshot.effectiveSeconds;
 	uint64_t emittedAtNs = snapshot.emittedVideoTimestampNs;
 	if (!snapshot.outputTimings.empty()) {
-		auto output = std::find_if(snapshot.outputTimings.begin(), snapshot.outputTimings.end(),
-					   [](const auto &timing) { return timing.label == "Streaming"; });
-		if (output == snapshot.outputTimings.end())
-			output = snapshot.outputTimings.begin();
+		const auto output = core::preview_output(snapshot.outputTimings.begin(), snapshot.outputTimings.end());
 		emittingHold = output->emittingHold;
 		emittingDelayed = output->emittingDelayed;
 		paused = output->paused;

@@ -158,7 +158,8 @@ bool configure_multistream_encoders(obs_output_t *master, std::string &error)
 	}
 	obs_video_info videoInfo{};
 	obs_audio_info audioInfo{};
-	if (!obs_get_video_info(&videoInfo) || !obs_get_audio_info(&audioInfo) || !obs_get_video() || !obs_get_audio()) {
+	if (!obs_get_video_info(&videoInfo) || !obs_get_audio_info(&audioInfo) || !obs_get_video() ||
+	    !obs_get_audio()) {
 		error = "OBS video and audio are not initialized.";
 		return false;
 	}
@@ -247,11 +248,15 @@ bool configure_multistream_encoders(obs_output_t *master, std::string &error)
 		obs_data_set_int(audioSettings, "bitrate", bitrate);
 		obs_data_set_string(videoSettings, "rate_control", "CBR");
 		obs_data_set_int(videoSettings, "bitrate", config_get_int(config, "SimpleOutput", "VBitrate"));
-		const char *presetKey = selected == "qsv" ? "QSVPreset" : selected == "amd" ? "AMDPreset" :
-					selected == "nvenc" ? "NVENCPreset2" : "Preset";
+		const char *presetKey = selected == "qsv"     ? "QSVPreset"
+					: selected == "amd"   ? "AMDPreset"
+					: selected == "nvenc" ? "NVENCPreset2"
+							      : "Preset";
 		const std::string preset = config_string(config, "SimpleOutput", presetKey);
 		if (!preset.empty())
-			obs_data_set_string(videoSettings, videoId.starts_with("ffmpeg_") && selected == "nvenc" ? "preset2" : "preset",
+			obs_data_set_string(videoSettings,
+					    videoId.starts_with("ffmpeg_") && selected == "nvenc" ? "preset2"
+												  : "preset",
 					    preset.c_str());
 		if (config_get_bool(config, "SimpleOutput", "UseAdvanced")) {
 			const std::string options = config_string(config, "SimpleOutput", "x264Settings");
@@ -270,15 +275,15 @@ bool configure_multistream_encoders(obs_output_t *master, std::string &error)
 		error = "The OBS streaming audio bitrate must be positive.";
 		return false;
 	}
-	obs_data_set_int(audioSettings, "bitrate", supported_audio_bitrate(audioId.c_str(), requestedAudioBitrate,
-								 audioInfo.samples_per_sec));
+	obs_data_set_int(audioSettings, "bitrate",
+			 supported_audio_bitrate(audioId.c_str(), requestedAudioBitrate, audioInfo.samples_per_sec));
 	obs_data_set_string(audioSettings, "rate_control", "CBR");
 	apply_service_settings(config, advanced, videoSettings, audioSettings);
 	const std::string suffix = std::to_string(reinterpret_cast<uintptr_t>(master));
-	OBSEncoderAutoRelease video = obs_video_encoder_create(videoId.c_str(), ("dynamic-delay-master-video-" + suffix).c_str(),
-							      videoSettings, nullptr);
-	OBSEncoderAutoRelease audio = obs_audio_encoder_create(audioId.c_str(), ("dynamic-delay-master-audio-" + suffix).c_str(),
-							      audioSettings, audioMixer, nullptr);
+	OBSEncoderAutoRelease video = obs_video_encoder_create(
+		videoId.c_str(), ("dynamic-delay-master-video-" + suffix).c_str(), videoSettings, nullptr);
+	OBSEncoderAutoRelease audio = obs_audio_encoder_create(
+		audioId.c_str(), ("dynamic-delay-master-audio-" + suffix).c_str(), audioSettings, audioMixer, nullptr);
 	if (!video || !audio) {
 		error = "OBS could not create the configured multistream video/audio encoders.";
 		return false;

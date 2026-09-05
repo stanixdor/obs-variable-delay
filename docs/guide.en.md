@@ -89,9 +89,12 @@ encoder described below.
 
 ### Credentials and transport
 
-Names, URLs, and keys are saved in the plugin's local OBS configuration file, `multistream.json`, with owner-only
-read/write permissions. **This is not encryption or an operating-system credential vault.** Other software running
-as your account can read it. Do not publish the file, include it in public backups, or share screenshots while the
+Names, URLs, and keys are saved in the plugin's local OBS configuration file, `multistream.json`. On Unix
+(macOS/Linux), the file uses owner-only read/write permissions (`0600`). On Windows, access inherits the
+configuration directory's OS access controls; the plugin does not install a private Windows ACL. Keep that
+directory private, especially with portable OBS or a custom/shared configuration location.
+**This is not encryption or an operating-system credential vault.** Other software running as your account can
+read it. Do not publish the file, include it in public backups, or share screenshots while the
 key is visible. The destination list shows only the server host, not potentially sensitive URL paths.
 
 RTMPS verifies server certificates and hostnames through the private OBS-derived librtmp transport. FFmpeg is used
@@ -230,9 +233,9 @@ The preview reuses OBS's rendered Program texture: it downsizes to 320×180 on t
 per second, mapping the transfer on the following video frame. It does not register a raw video consumer, force
 full-resolution per-frame readback, or keep `obs_video_active` true by itself. Folding the preview frees capture,
 GPU resources, and history. Hiding the entire dock retains low-rate history for reopening but stops repainting.
-During a paused recording, capture is suspended and required history is retained for resuming. When streaming and
-recording coexist, the preview follows streaming; otherwise it follows the recording. Server/CDN/player latency is
-not included.
+The preview follows native streaming first, then integrated Multistream, then recording. A recording pause
+suspends capture and retains required history only when recording is the selected audience; it does not freeze
+an active Multistream preview. Server/CDN/player latency is not included.
 
 ## Deliberate limitations of version 1.2.0
 

@@ -1,0 +1,2 @@
+# Preserve upstream vendored formatting / Conservar el formato original de terceros.
+vendor/** whitespace=-blank-at-eof,-space-before-tab

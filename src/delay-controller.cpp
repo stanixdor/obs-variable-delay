@@ -2,6 +2,7 @@
 
 #include "audience-preview.hpp"
 #include "audio-preflight.hpp"
+#include "core/preview-timing.hpp"
 #include "hold-media-hub.hpp"
 #include "output-session.hpp"
 #include "plugin-support.h"
@@ -251,18 +252,18 @@ DelaySnapshot DelayController::snapshot() const
 		aggregate.measuredMegabitsPerSecond += current.measuredMegabitsPerSecond;
 		aggregate.emittingHold = aggregate.emittingHold || current.emittingHold;
 		aggregate.emittingDelayed = aggregate.emittingDelayed || current.emittingDelayed;
-		// Streaming is the audience view when both outputs are present.
-		if (session->label() == "Streaming" || aggregate.outputTimings.size() == 1) {
-			aggregate.effectiveSeconds = current.effectiveSeconds;
-			aggregate.emittedVideoTimestampNs = current.emittedVideoTimestampNs;
-			aggregate.bufferStartTimestampNs = current.bufferStartTimestampNs;
-			aggregate.paused = current.paused;
-		}
 		progressTotal += current.progress;
 		if (state_rank(current.state) > state_rank(aggregate.state)) {
 			aggregate.state = current.state;
 			aggregate.detail = session->label() + ": " + current.detail;
 		}
+	}
+	const auto audience = core::preview_output(aggregate.outputTimings.begin(), aggregate.outputTimings.end());
+	if (audience != aggregate.outputTimings.end()) {
+		aggregate.effectiveSeconds = audience->effectiveSeconds;
+		aggregate.emittedVideoTimestampNs = audience->emittedVideoTimestampNs;
+		aggregate.bufferStartTimestampNs = audience->bufferStartTimestampNs;
+		aggregate.paused = audience->paused;
 	}
 	aggregate.progress = progressTotal / static_cast<double>(sessions_.size());
 	if (aggregate.detail.empty())

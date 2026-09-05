@@ -1,4 +1,5 @@
 #include "core/preview-timing.hpp"
+#include "delay-types.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -100,6 +101,62 @@ void telemetry_sanitization_has_bounded_integer_conversions()
 	      "history remains bounded for extreme telemetry");
 	check(preview_delay_ns(0.25) == 250'000'000ULL, "fractional delay must retain subsecond precision");
 }
+
+void native_streaming_has_priority_in_every_session_order()
+{
+	std::vector<dynamic_delay::DelaySnapshot::OutputTiming> outputs(3);
+	outputs[0].label = "Multistream";
+	outputs[0].effectiveSeconds = 20.0;
+	outputs[1].label = "Recording";
+	outputs[1].paused = true;
+	outputs[2].label = "Streaming";
+	outputs[2].effectiveSeconds = 30.0;
+	outputs[2].emittedVideoTimestampNs = 42;
+	std::size_t permutations = 0;
+	do {
+		const auto selected = preview_output(outputs.begin(), outputs.end());
+		check(selected->label == "Streaming", "native streaming must win regardless of map iteration order");
+		check(!selected->paused && selected->effectiveSeconds == 30.0 &&
+			      selected->emittedVideoTimestampNs == 42,
+		      "all preview timing fields must come from the selected live output");
+		++permutations;
+	} while (std::next_permutation(outputs.begin(), outputs.end(),
+				       [](const auto &left, const auto &right) { return left.label < right.label; }));
+	check(permutations == 6, "all three-output insertion orders must be covered");
+}
+
+void multistream_wins_over_a_paused_recording()
+{
+	std::vector<dynamic_delay::DelaySnapshot::OutputTiming> outputs(2);
+	outputs[0].label = "Recording";
+	outputs[0].paused = true;
+	outputs[0].effectiveSeconds = 50.0;
+	outputs[1].label = "Multistream";
+	outputs[1].effectiveSeconds = 30.0;
+	outputs[1].emittingDelayed = true;
+	outputs[1].emittedVideoTimestampNs = 123;
+	outputs[1].bufferStartTimestampNs = 100;
+	for (int order = 0; order < 2; ++order) {
+		const auto selected = preview_output(outputs.begin(), outputs.end());
+		check(selected->label == "Multistream" && !selected->paused && selected->emittingDelayed,
+		      "recording pause must not suspend the multistream audience preview");
+		check(selected->effectiveSeconds == 30.0 && selected->emittedVideoTimestampNs == 123 &&
+			      selected->bufferStartTimestampNs == 100,
+		      "history pin and displayed frame must follow multistream rather than recording");
+		std::reverse(outputs.begin(), outputs.end());
+	}
+}
+
+void recording_only_and_empty_selection_are_preserved()
+{
+	std::vector<dynamic_delay::DelaySnapshot::OutputTiming> outputs;
+	check(preview_output(outputs.begin(), outputs.end()) == outputs.end(), "no output yields no selected timing");
+	outputs.emplace_back();
+	outputs.back().label = "Recording";
+	outputs.back().paused = true;
+	check(preview_output(outputs.cbegin(), outputs.cend())->paused,
+	      "a recording-only preview must retain its recording pause state");
+}
 } // namespace
 
 int main()
@@ -110,7 +167,10 @@ int main()
 		clock_regression_restarts_sampling_without_underflow();
 		active_timing_is_independent_of_slider_and_keeps_history();
 		telemetry_sanitization_has_bounded_integer_conversions();
-		std::cout << "5/5 production preview timing tests passed\n";
+		native_streaming_has_priority_in_every_session_order();
+		multistream_wins_over_a_paused_recording();
+		recording_only_and_empty_selection_are_preserved();
+		std::cout << "8/8 production preview timing tests passed\n";
 		return 0;
 	} catch (const std::exception &error) {
 		std::cerr << "[FAIL] " << error.what() << '\n';

@@ -3,10 +3,32 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <string_view>
 
 namespace dynamic_delay::core {
 
 inline constexpr uint64_t PreviewIntervalNs = 500'000'000ULL;
+
+inline constexpr int preview_output_priority(const std::string_view label) noexcept
+{
+	if (label == "Streaming")
+		return 3;
+	if (label == "Multistream")
+		return 2;
+	if (label == "Recording")
+		return 1;
+	return 0;
+}
+
+// Output timing vectors originate in an unordered session map. Select one
+// audience explicitly so an unrelated recording pause cannot suspend a live
+// multistream preview. The controller and widget must use the same policy.
+template<class Iterator> Iterator preview_output(Iterator first, Iterator last)
+{
+	return std::max_element(first, last, [](const auto &left, const auto &right) {
+		return preview_output_priority(left.label) < preview_output_priority(right.label);
+	});
+}
 
 // The render callback runs once per OBS video mix, not just once per frame.
 // Sampling before readback bounds GPU transfers even with auxiliary views.

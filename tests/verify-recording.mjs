@@ -22,7 +22,7 @@ assert.equal(probe.streams.length, 2, "One video and one audio stream");
 const decoded = spawnSync("ffmpeg", ["-v", "error", "-xerror", "-i", file, "-f", "null", "-"], {encoding: "utf8"});
 assert.equal(decoded.status, 0, decoded.error?.message ?? decoded.stderr);
 assert.equal(decoded.stderr, "", "Full decode must not report errors");
-const video = run("ffmpeg", ["-v", "error", "-i", file, "-vf", "fps=30,scale=1:1", "-pix_fmt", "rgb24", "-f", "rawvideo", "-"]);
+const video = run("ffmpeg", ["-v", "error", "-i", file, "-vf", "fps=30:start_time=0,scale=1:1", "-pix_fmt", "rgb24", "-f", "rawvideo", "-"]);
 const segments = [];
 for (let i = 0; i < video.length; i += 3) {
   const color = [video[i], video[i + 1], video[i + 2]];
@@ -34,7 +34,11 @@ for (let i = 0; i < video.length; i += 3) {
 }
 assert.deepEqual(segments.map((segment) => segment.color), [0, 1, 0, 2],
   "Video shows live red, hold green, delayed red, then live blue");
-const audio = run("ffmpeg", ["-v", "error", "-i", file, "-vn", "-ac", "1", "-ar", "48000", "-f", "f32le", "-"]);
+// Raw PCM alone concatenates decoded AAC blocks and silently removes timestamp
+// gaps. Render the packet timeline (including safe GOP-splice gaps) before
+// comparing it to the video's timestamp-aware FPS filter.
+const audio = run("ffmpeg", ["-v", "error", "-i", file, "-vn", "-af",
+  "aresample=async=1:min_hard_comp=0.001:first_pts=0", "-ac", "1", "-ar", "48000", "-f", "f32le", "-"]);
 const samples = new Float32Array(audio.buffer, audio.byteOffset, audio.length / 4);
 const frequencies = [440, 220, 880];
 function amplitude(at, hz) {
@@ -62,6 +66,8 @@ const audioTransitions = [];
 let previousTone = 0;
 for (let at = 0.2; at + 0.1 < samples.length / 48000; at += 0.01) {
   const amplitudes = frequencies.map((hz) => amplitude(at, hz));
+  // Silence in a timestamp bridge is not a spurious 440 Hz transition.
+  if (Math.max(...amplitudes) < 0.02) continue;
   const tone = amplitudes.indexOf(Math.max(...amplitudes));
   if (tone !== previousTone) {
     audioTransitions.push({color: tone, at: at + 0.05});

@@ -14,6 +14,7 @@
 !.clang-format
 !.gersemirc
 !.gitignore
+!.gitattributes
 !buildspec.json
 !CHANGELOG.md
 !CMakeLists.txt

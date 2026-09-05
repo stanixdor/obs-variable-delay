@@ -92,9 +92,12 @@ otro buffer completo de delay. Preparing/Filling sigue necesitando el encoder te
 
 ### Credenciales y transporte
 
-Nombres, URLs y claves se guardan en `multistream.json`, dentro de la configuración local del plugin en OBS, con
-permisos de lectura/escritura sólo para el propietario. **No es cifrado ni un almacén de credenciales del sistema.**
-Otro software ejecutado con tu cuenta puede leerlo. No publiques el archivo, no lo incluyas en copias públicas ni
+Nombres, URLs y claves se guardan en `multistream.json`, dentro de la configuración local del plugin en OBS.
+En Unix (macOS/Linux), el archivo usa permisos de lectura/escritura sólo para el propietario (`0600`). En Windows,
+hereda los controles de acceso del sistema del directorio de configuración; el plugin no instala una ACL privada.
+Mantén privado ese directorio, especialmente con OBS portable o una configuración personalizada/compartida.
+**No es cifrado ni un almacén de credenciales del sistema.** Otro software ejecutado con tu cuenta puede leerlo.
+No publiques el archivo, no lo incluyas en copias públicas ni
 compartas capturas con la clave visible. La lista muestra sólo el host del servidor, no rutas de URL que puedan
 contener información sensible.
 
@@ -236,9 +239,10 @@ La preview reutiliza la textura Program que OBS ya ha renderizado: reduce a 320�
 máximo dos veces por segundo, mapeando la transferencia en el siguiente frame de vídeo. No registra un consumidor
 de vídeo raw, no fuerza lecturas por frame a resolución completa ni mantiene `obs_video_active` activo por sí sola.
 Plegarla libera captura, recursos GPU e historial. Ocultar el panel completo conserva el historial de baja
-frecuencia para reabrirlo, pero detiene el repintado. Durante una pausa de grabación suspende la captura y conserva
-el historial necesario para reanudar. Si coexisten streaming y grabación, la preview sigue el streaming; en caso
-contrario sigue la grabación. No incluye la latencia del servidor, CDN ni reproductor.
+frecuencia para reabrirlo, pero detiene el repintado. La preview sigue primero el streaming nativo, después
+Multistream integrado y, por último, la grabación. Pausar una grabación suspende la captura y conserva el historial
+sólo si la grabación es la audiencia elegida; no congela una preview Multistream activa. No incluye la latencia del
+servidor, CDN ni reproductor.
 
 ## Limitaciones deliberadas de la versión 1.2.0
 

@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "OBS Dynamic Delay",
     short_name: "OBS Delay",
     description:
-      "Variable delay for OBS without restarting the output · Delay variable para OBS sin reiniciar la salida.",
+      "Variable delay and multi-RTMP for OBS · Delay variable y multi-RTMP para OBS.",
     start_url: "/",
     display: "standalone",
     background_color: "#070909",

@@ -55,8 +55,9 @@ private H.264/AAC encoder pair for all its destinations. Starting a native strea
 Upload bandwidth increases for each destination. Version 1.2.0 supports SDR NV12/I420 and mono/stereo audio;
 independent canvases, HDR, HEVC, AV1, and Opus are not supported for multistream. Other plugins' outputs are untouched.
 
-Keys are hidden by default and saved locally in `multistream.json` with owner-only permissions, **without
-encryption**. Saved destinations never start automatically. RTMPS verifies TLS certificates; do not share the
+Keys are hidden by default and saved locally in `multistream.json`, **without encryption**. Unix uses owner-only
+permissions (`0600`); Windows inherits the configuration directory's OS access controls, so keep that directory
+private. Saved destinations never start automatically. RTMPS verifies TLS certificates; do not share the
 configuration file or screenshots showing a key. See the [setup and security details](docs/guide.en.md#integrated-multistream).
 
 ### Download 1.2.0
@@ -208,8 +209,9 @@ inicia una pareja privada H.264/AAC para todos sus destinos. Iniciar después un
 de codificación. La subida aumenta con cada destino. Multistream 1.2.0 admite SDR NV12/I420 y audio mono/estéreo;
 no admite canvases independientes, HDR, HEVC, AV1 ni Opus. No se modifican outputs de otros plugins.
 
-Las claves se ocultan por defecto y se guardan localmente en `multistream.json` con permisos sólo para el
-propietario, **sin cifrar**. Los destinos guardados nunca arrancan automáticamente. RTMPS verifica los certificados
+Las claves se ocultan por defecto y se guardan localmente en `multistream.json`, **sin cifrar**. Unix usa permisos
+sólo para el propietario (`0600`); Windows hereda los controles de acceso del sistema del directorio de
+configuración: mantenlo privado. Los destinos guardados nunca arrancan automáticamente. RTMPS verifica los certificados
 TLS; no compartas la configuración ni capturas que muestren claves. Consulta la
 [configuración y seguridad](docs/guide.es.md#multistream-integrado).
 

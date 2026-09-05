@@ -62,7 +62,8 @@ bool valid_target(const MultistreamTarget &target, QString &error)
 		}
 	}
 	if (!url.isValid() || (url.scheme() != "rtmp" && url.scheme() != "rtmps") || url.host().isEmpty() ||
-	    !url.userInfo().isEmpty() || url.hasFragment() || url.hasQuery() || url.path().isEmpty()) {
+	    !url.userInfo().isEmpty() || url.hasFragment() || url.hasQuery() || url.path().isEmpty() ||
+	    url.port(1935) <= 0) {
 		error = obs_module_text("Multistream.Error.URL");
 		return false;
 	}
@@ -296,6 +297,10 @@ bool MultistreamController::start_target(const std::string &id, QString &error)
 {
 	if (shuttingDown_)
 		return false;
+	if (running(id)) {
+		error = obs_module_text("Multistream.Error.StopFirst");
+		return false;
+	}
 	const auto it = std::find_if(targets_.begin(), targets_.end(), [&](const auto &t) { return t.id == id; });
 	if (it == targets_.end() || !valid_target(*it, error))
 		return false;
@@ -312,7 +317,7 @@ bool MultistreamController::start_target(const std::string &id, QString &error)
 	std::string reason;
 	if (!transport_->start(*it, description_, reason)) {
 		error = QString::fromStdString(reason);
-		if (!transport_->has_targets())
+		if (!transport_->has_targets() && pendingStarts_.empty())
 			destroy_master();
 		return false;
 	}
@@ -397,14 +402,21 @@ void MultistreamController::poll()
 		if (ready || startupTimer_.elapsed() > 10'000) {
 			const auto pending = std::exchange(pendingStarts_, {});
 			for (const auto &id : pending) {
-				QString error = reason;
-				if (!ready || !start_target(id, error))
-					errors_[id] = error.toStdString();
+				// Start the entire batch against this generation's headers. Calling
+				// start_target here could destroy/recreate the collector after the
+				// first failed destination and strand the remaining pending starts.
+				const auto target = std::find_if(targets_.begin(), targets_.end(),
+								 [&](const auto &entry) { return entry.id == id; });
+				if (target == targets_.end())
+					continue;
+				std::string error = reason.toStdString();
+				if (!ready || !transport_->start(*target, description_, error))
+					errors_[id] = std::move(error);
 			}
-			if (!transport_->has_targets())
-				destroy_master();
 		}
 	}
+	if (master_ && pendingStarts_.empty() && !transport_->has_targets())
+		destroy_master();
 	emit changed();
 }
 

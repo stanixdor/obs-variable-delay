@@ -30,8 +30,9 @@ No additional changes listed.
   started later may need additional encoding.
 - Bounded independent destination queues, safe-keyframe joining/reconnection, and RTMP/RTMPS delivery through a
   private OBS-derived librtmp transport with TLS verification. FFmpeg is used only for FLV muxing.
-- Local destination persistence in owner-only `multistream.json`, without encryption or key logging. English and
-  Spanish setup, security, bandwidth, scope, and download documentation.
+- Local destination persistence in `multistream.json`, without encryption or key logging: Unix permissions are
+  owner-only (`0600`); Windows inherits the configuration directory's OS access controls. English and Spanish
+  setup, security, bandwidth, scope, and download documentation.
 
 #### Scope and validation
 
@@ -160,7 +161,8 @@ No hay cambios adicionales enumerados.
   después el streaming nativo puede requerir codificación adicional.
 - Colas independientes acotadas, entrada/reconexión en keyframes seguros y envío RTMP/RTMPS mediante un transporte
   librtmp privado derivado de OBS con verificación TLS. FFmpeg se usa sólo para multiplexar FLV.
-- Persistencia local en `multistream.json` con permisos sólo para el propietario, sin cifrado ni logs de claves.
+- Persistencia local en `multistream.json`, sin cifrado ni logs de claves: Unix usa permisos sólo para el
+  propietario (`0600`); Windows hereda los controles de acceso del sistema del directorio de configuración.
   Documentación en inglés/español de configuración, seguridad, subida, alcance y descargas.
 
 #### Alcance y validación
