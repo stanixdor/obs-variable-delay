@@ -31,6 +31,7 @@ No additional changes listed.
 - Follow the actual emitted video capture timestamp in the preview, independently of slider changes, and retain
   required history across recording pauses.
 - Avoid keeping OBS video active or locking video settings merely because the preview is enabled.
+- Remove literal shell quotes from macOS PKG identifiers/versions; validate final installer metadata in CI.
 
 #### Performance
 
@@ -135,6 +136,7 @@ No hay cambios adicionales enumerados.
 - La preview sigue el timestamp de captura del vídeo realmente emitido, independientemente de cambios del slider,
   y conserva el historial necesario durante las pausas de grabación.
 - La preview no mantiene activo el vídeo de OBS ni bloquea sus ajustes sólo por estar habilitada.
+- Se eliminan comillas literales del identificador/versión del PKG de macOS; la CI valida sus metadatos finales.
 
 #### Rendimiento
 

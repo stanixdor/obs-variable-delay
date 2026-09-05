@@ -201,6 +201,21 @@ jobs:
           codesignUser: ${{ secrets.MACOS_NOTARIZATION_USERNAME }}
           codesignPass: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
 
+      - name: Validate macOS Installer Metadata 🧪
+        if: ${{ fromJSON(needs.check-event.outputs.package) }}
+        run: |
+          plugin_name="$(jq -er '.name' buildspec.json)"
+          plugin_version="$(jq -er '.version' buildspec.json)"
+          bundle_id="$(jq -er '.platformConfig.macos.bundleId' buildspec.json)"
+          package_check_dir="$(mktemp -d "${RUNNER_TEMP}/obs-package-check.XXXXXX")"
+          pkgutil --expand "release/${plugin_name}-${plugin_version}-macos-universal.pkg" \
+            "${package_check_dir}/expanded"
+          package_info="${package_check_dir}/expanded/${plugin_name}.pkg/PackageInfo"
+          [[ "$(xmllint --xpath 'string(/pkg-info/@identifier)' "${package_info}")" == "${bundle_id}" ]]
+          [[ "$(xmllint --xpath 'string(/pkg-info/@version)' "${package_info}")" == "${plugin_version}" ]]
+          [[ "$(xmllint --xpath 'string(/installer-gui-script/pkg-ref[@version]/@version)' \
+            "${package_check_dir}/expanded/Distribution")" == "${plugin_version}" ]]
+
       - name: Upload Artifacts 📡
         uses: actions/upload-artifact@v4
         with:
