@@ -1,3 +1,23 @@
+<div align="center">
+Edit: SyncMultiStream to OBS start streaming button
+</div>
+
+   English
+
+Start and stop with OBS (optional)
+
+Each destination has a checkbox in its Edit window: Start and stop with the OBS stream. When it is on, that destination starts by itself when you start streaming in OBS and stops when you stop streaming. Destinations with the checkbox off work as before: you start and stop them by hand.
+
+Español
+
+Iniciar y detener con OBS (opcional)
+
+Cada destino tiene una casilla en su ventana Editar: Iniciar y detener junto con la emisión de OBS. Si está activada, ese destino arranca solo cuando inicias la emisión en OBS y se detiene cuando la detienes. Los destinos con la casilla desactivada funcionan como antes: los inicias y detienes a mano.
+
+<div align="center">
+<img width="730" height="354" alt="image" src="https://github.com/user-attachments/assets/a8f9a566-1f4d-4e01-8eeb-00e795a57380" />
+</div>
+
 # OBS Dynamic Delay
 
 <div align="center">

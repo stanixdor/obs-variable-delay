@@ -125,6 +125,11 @@ public:
 		auto *keyWarning = new QLabel(text("Multistream.KeyWarning"), this);
 		keyWarning->setWordWrap(true);
 		root->addWidget(keyWarning);
+		sync_ = new QCheckBox(text("Multistream.SyncWithObs"), this);
+		sync_->setObjectName(QStringLiteral("multistreamSyncWithObs"));
+		sync_->setToolTip(text("Multistream.SyncWithObs.Tooltip"));
+		sync_->setChecked(target.syncWithObs);
+		root->addWidget(sync_);
 		validation_ = new QLabel(this);
 		validation_->setWordWrap(true);
 		validation_->setStyleSheet(QStringLiteral("color: #ef5350;"));
@@ -175,12 +180,14 @@ public:
 		target.name = name_->text().trimmed().toStdString();
 		target.server = server_->text().trimmed().toStdString();
 		target.key = key_->text().toStdString();
+		target.syncWithObs = sync_->isChecked();
 	}
 
 private:
 	QLineEdit *name_ = nullptr;
 	QLineEdit *server_ = nullptr;
 	QLineEdit *key_ = nullptr;
+	QCheckBox *sync_ = nullptr;
 	QLabel *validation_ = nullptr;
 };
 

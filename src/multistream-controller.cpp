@@ -151,6 +151,14 @@ MultistreamController::~MultistreamController()
 void MultistreamController::frontend_event(enum obs_frontend_event event, void *data)
 {
 	auto *self = static_cast<MultistreamController *>(data);
+	if (event == OBS_FRONTEND_EVENT_STREAMING_STARTED) {
+		self->sync_targets(true);
+		return;
+	}
+	if (event == OBS_FRONTEND_EVENT_STREAMING_STOPPED) {
+		self->sync_targets(false);
+		return;
+	}
 	if (event != OBS_FRONTEND_EVENT_EXIT && event != OBS_FRONTEND_EVENT_PROFILE_CHANGING &&
 	    event != OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING)
 		return;
@@ -161,6 +169,34 @@ void MultistreamController::frontend_event(enum obs_frontend_event event, void *
 		self->shuttingDown_ = true;
 		self->timer_.stop();
 	}
+}
+
+// Starts or stops every destination that opted in to follow OBS's native
+// stream. Destinations without the flag are never touched, so manual control
+// keeps working exactly as before.
+void MultistreamController::sync_targets(const bool start)
+{
+	if (shuttingDown_)
+		return;
+	std::vector<std::string> ids;
+	for (const auto &target : targets_) {
+		if (target.syncWithObs)
+			ids.push_back(target.id);
+	}
+	for (const auto &id : ids) {
+		if (start) {
+			if (running(id))
+				continue;
+			QString error;
+			if (!start_target(id, error)) {
+				errors_[id] = error.toStdString();
+				obs_log(LOG_WARNING, "A multistream destination could not start with the OBS stream.");
+			}
+		} else if (running(id)) {
+			stop_target(id);
+		}
+	}
+	emit changed();
 }
 
 std::vector<MultistreamStatus> MultistreamController::statuses() const
@@ -432,6 +468,7 @@ void MultistreamController::load_settings()
 					 obj.value("name").toString().toStdString(),
 					 obj.value("server").toString().toStdString(),
 					 obj.value("key").toString().toStdString()};
+		target.syncWithObs = obj.value("syncWithObs").toBool(false);
 		QString error;
 		if (target.id.empty() || targets_.size() >= MaxTargets || !valid_target(target, error) ||
 		    std::any_of(targets_.begin(), targets_.end(), [&](const auto &t) { return t.id == target.id; }))
@@ -453,7 +490,8 @@ bool MultistreamController::save_settings(QString &error) const
 		targets.append(QJsonObject{{"id", QString::fromStdString(target.id)},
 					   {"name", QString::fromStdString(target.name)},
 					   {"server", QString::fromStdString(target.server)},
-					   {"key", QString::fromStdString(target.key)}});
+					   {"key", QString::fromStdString(target.key)},
+					   {"syncWithObs", target.syncWithObs}});
 	}
 	QSaveFile file(path);
 	const auto bytes = QJsonDocument(QJsonObject{{"version", 1}, {"targets", targets}}).toJson();

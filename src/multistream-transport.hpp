@@ -13,6 +13,8 @@ struct MultistreamTarget {
 	std::string name;
 	std::string server;
 	std::string key;
+	// When true, this destination starts/stops together with OBS's native stream.
+	bool syncWithObs = false;
 };
 
 // H.264 video and AAC audio only. Header bytes must match the shared encoded

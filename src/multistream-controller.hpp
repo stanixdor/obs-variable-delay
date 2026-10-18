@@ -43,6 +43,7 @@ signals:
 
 private:
 	static void frontend_event(enum obs_frontend_event event, void *data);
+	void sync_targets(bool start);
 	bool create_master(QString &error);
 	void destroy_master();
 	bool describe_stream(QString &error);
